@@ -1,0 +1,49 @@
+# source will be downloaded prior to filling in jinja templates
+# Example assumes that this folder has setup.py in it
+source:
+  git_url: ../
+
+package:
+  name: microdrop.mr-box-peripheral-board-plugin
+
+{% if GIT_DESCRIBE_NUMBER > '0' %}
+  version: {{ GIT_DESCRIBE_TAG[1:] }}+{{ GIT_DESCRIBE_NUMBER }}
+{% else %}
+  version: {{ GIT_DESCRIBE_TAG[1:] }}
+{% endif %}
+
+
+build:
+  number: 0
+  script: python -m mpm.bin.build
+
+requirements:
+  build:
+    - conda-helpers >=0.4
+    - flatland-fork
+    - microdrop >=2.8
+    - microdrop-plugin-template
+    - microdrop-plugin-manager >=0.14
+    - path_helpers >=0.5
+    - pip-helpers
+    - pyyaml
+    - wheeler.pygtkhelpers
+
+  run:
+    - conda-helpers >=0.4
+    - flatland-fork
+    - microdrop >=2.8
+    - microdrop-plugin-template
+    - microdrop-plugin-manager >=0.14
+    - path_helpers >=0.5
+    - pip-helpers
+    - pyyaml
+    - wheeler.pygtkhelpers
+
+test:
+  commands:
+    - python -m mpm.bin.import_test -a {{ PKG_NAME }}
+
+about:
+  home: http://github.com/wheeler-microfluidics/microdrop.mr-box-peripheral-board-plugin
+  license: BSD
