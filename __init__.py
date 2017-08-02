@@ -54,24 +54,8 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataControlle
         except AttributeError:
             pass
 
-    def on_app_exit(self):
-        '''
-        Handler called just before the Microdrop application exits.
-        '''
-        pass
 
-    def on_protocol_swapped(self, old_protocol, protocol):
-        '''
-        Handler called when a new step is loaded/activated.
 
-        Parameters
-        ----------
-        old_protocol : microdrop.protocol.Protocol
-            Previously activated protocol.
-        protocol : microdrop.protocol.Protocol
-            Newly activated protocol.
-        '''
-        pass
 
     def on_app_options_changed(self, plugin_name):
         '''
@@ -120,16 +104,6 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataControlle
             logger.debug('Turning off all electrodes.')
             self.control_board.hv_output_enabled = False
 
-    def on_experiment_log_selection_changed(self, data):
-        '''
-        Handler called whenever the experiment log selection changes.
-
-        Parameters
-        ----------
-        data : dict
-            Dictionary of experiment log data for the selected steps.
-        '''
-        pass
 
     def on_step_options_changed(self, plugin, step_number):
         '''
@@ -156,28 +130,6 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataControlle
             Step number of newly activated step.
         '''
         pass
-
-    def get_schedule_requests(self, function_name):
-        '''
-        For example, to request to schedule the ``on_step_options_changed``
-        callback to be called on this plugin before being the protocol grid UI
-        is updated, use:
-
-            >>>> from microdrop.plugin_manager import ScheduleRequest
-            >>>>
-            >>>> if function_name in ['on_step_options_changed']:
-            >>>>     return [ScheduleRequest(self.name,
-            >>>>                             'microdrop.gui.protocol_grid_controller'),
-            >>>>             ScheduleRequest(self.name,
-            >>>>                             'microdrop.gui.protocol_controller'),
-
-        Returns
-        -------
-        list
-            List of scheduling requests (i.e., ``ScheduleRequest`` instances)
-            for the function specified by function_name.
-        '''
-        return []
 
 
 PluginGlobals.pop_env()
