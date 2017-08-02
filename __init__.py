@@ -72,13 +72,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Handler called when a protocol is paused.
         '''
-        app = get_app()
-        self._kill_running_step()
-        if self.control_board and not app.realtime_mode:
-            # Turn off all electrodes
-            logger.debug('Turning off all electrodes.')
-            self.control_board.hv_output_enabled = False
-
+        pass
 
     def on_step_options_changed(self, plugin, step_number):
         '''
