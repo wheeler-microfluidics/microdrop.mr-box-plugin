@@ -24,6 +24,7 @@ requirements:
     - microdrop >=2.8
     - microdrop-plugin-template
     - microdrop-plugin-manager >=0.14
+    - mr-box-peripheral-board >=0.5.2
     - path_helpers >=0.5
     - pip-helpers
     - pyyaml
@@ -35,6 +36,7 @@ requirements:
     - microdrop >=2.8
     - microdrop-plugin-template
     - microdrop-plugin-manager >=0.14
+    - mr-box-peripheral-board >=0.5.2
     - path_helpers >=0.5
     - pip-helpers
     - pyyaml
