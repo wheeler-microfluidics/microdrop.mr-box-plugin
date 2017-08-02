@@ -3,7 +3,7 @@ import logging
 from flatland import Boolean, Integer, Float, Form
 from flatland.validation import ValueAtLeast
 from microdrop.app_context import get_app
-from microdrop.plugin_helpers import (StepOptionsController, AppDataController)
+from microdrop.plugin_helpers import StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
                                       PluginGlobals)
 import conda_helpers as ch
@@ -19,7 +19,7 @@ del get_versions
 PluginGlobals.push_env('microdrop.managed')
 
 
-class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataController):
+class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
     '''
     This class is automatically registered with the PluginManager.
     '''
@@ -31,16 +31,11 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataControlle
     except NameError:
         version = 'v0.0.0+unknown'
 
-    AppFields = Form.of(Integer.named('int_field')
-                        .using(default=1, optional=True,
-                               validators=[ValueAtLeast(minimum=0)]))
-
     StepFields = Form.of(Boolean.named('bool_field')
                          .using(default=False, optional=True),
                          Float.named('float_field')
                          .using(default=0, optional=True,
                                 validators=[ValueAtLeast(minimum=0)]))
-
 
     def __init__(self):
         super(MrBoxPeripheralBoardPlugin, self).__init__()
@@ -53,26 +48,6 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController, AppDataControlle
             super(MrBoxPeripheralBoardPlugin, self).on_plugin_disable()
         except AttributeError:
             pass
-
-
-
-
-    def on_app_options_changed(self, plugin_name):
-        '''
-        Handler called when application field values have changed for the
-        specified plugin.
-
-        Parameters
-        ----------
-        plugin_name : str
-            Name of plugin.
-        '''
-        if plugin_name == self.name:
-            # XXX Application field values have changed for current plugin.
-
-            # Get latest application field values for this plugin.
-            app_values = self.get_app_values()
-            # ... Process application values, e.g., update UI ...
 
     def on_step_run(self):
         '''
