@@ -1,4 +1,5 @@
 import logging
+import time
 
 from flatland import Boolean, Form
 from microdrop.app_context import get_app
@@ -6,8 +7,9 @@ from microdrop.plugin_helpers import StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
                                       PluginGlobals)
 import conda_helpers as ch
-import mr_box_peripheral_board as mb
+import mr_box_peripheral_board as mrbox
 import path_helpers as ph
+import serial
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +117,23 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 self.board.close()
 
             # Try to connect to peripheral board through serial connection.
-            self.board = mb.SerialProxy()
+
+            # XXX Try to connect multiple times (see [issue 1][1]).
+            # See [issue 1][1] on the [MR-Box peripheral board firmware
+            # project][2].
+            #
+            # [1]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py/issues/1
+            # [2]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py
+            retry_count = 2
+            for i in xrange(retry_count):
+                try:
+                    self.board = mrbox.SerialProxy(baudrate=57600,
+                                                   settling_time_s=2.5)
+                    break
+                except serial.SerialException:
+                    time.sleep(1)
+            else:
+                raise IOError('Could not connect to MR-Box control board.')
 
             # Serial connection to peripheral **successfully established**.
             logger.info('Serial connection to peripheral board **successfully'
