@@ -111,42 +111,40 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Establish serial connection to MR-Box peripheral board.
         '''
-        try:
-            if self.board is not None:
-                # Close existing board connection.
+        # Try to connect to peripheral board through serial connection.
+
+        # XXX Try to connect multiple times.
+        # See [issue 1][1] on the [MR-Box peripheral board firmware
+        # project][2].
+        #
+        # [1]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py/issues/1
+        # [2]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py
+        retry_count = 2
+        for i in xrange(retry_count):    
+            try:
                 self.board.close()
+                self.board = None
+            except:
+                pass
 
-            # Try to connect to peripheral board through serial connection.
-
-            # XXX Try to connect multiple times (see [issue 1][1]).
-            # See [issue 1][1] on the [MR-Box peripheral board firmware
-            # project][2].
-            #
-            # [1]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py/issues/1
-            # [2]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py
-            retry_count = 2
-            for i in xrange(retry_count):
-                try:
-                    self.board = mrbox.SerialProxy(baudrate=57600,
-                                                   settling_time_s=2.5)
-                    break
-                except serial.SerialException:
-                    time.sleep(1)
-            else:
-                raise IOError('Could not connect to MR-Box control board.')
-
-            # Serial connection to peripheral **successfully established**.
-            logger.info('Serial connection to peripheral board **successfully'
-                        ' established** on port `%s`', self.board.port)
-            logger.info('Peripheral board properties:\n%s',
-                        self.board.properties)
-
-            logger.info('Reset board state to defaults.')
-            self.reset_board_state()
-        except Exception:
+            try:
+                self.board = mrbox.SerialProxy(baudrate=57600,
+                                               settling_time_s=2.5)
+                
+                # Serial connection to peripheral **successfully established**.
+                logger.info('Serial connection to peripheral board **successfully'
+                            ' established** on port `%s`', self.board.port)
+                logger.info('Peripheral board properties:\n%s',
+                            self.board.properties)
+                logger.info('Reset board state to defaults.')
+                self.reset_board_state()
+                break
+            except serial.SerialException:
+                time.sleep(1)
+        else:
             # Serial connection to peripheral **could not be established**.
             logger.warning('Serial connection to peripheral board could not '
-                           'be established.', exc_info=True)
+                           'be established.')
 
     def close_board_connection(self):
         '''
