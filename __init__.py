@@ -44,10 +44,18 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         # example, the plugin manager dialog.
         self.name = self.plugin_name
 
+        # Flag to indicate whether user has already been warned about the board
+        # not being connected when trying to set board state.
+        self._user_warned = False
+
     def reset_board_state(self):
         '''
         Reset MR-Box peripheral board to default state.
         '''
+        # Reset user warned state (i.e., warn user next time board settings
+        # are applied when board is not connected).
+        self._user_warned = False
+
         if self.board is None:
             return
 
@@ -91,6 +99,11 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
+        elif not self._user_warned:
+            logger.warning('[%s] Cannot apply board settings since board is '
+                           'not connected.', __name__, exc_info=True)
+            # Do not warn user again until after the next connection attempt.
+            self._user_warned = True
 
     def open_board_connection(self):
         '''
@@ -114,8 +127,8 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             self.reset_board_state()
         except Exception:
             # Serial connection to peripheral **could not be established**.
-            logger.warning('Serial connection to peripheral board **could not'
-                           ' be established**.', exc_info=True)
+            logger.warning('Serial connection to peripheral board could not '
+                           'be established.', exc_info=True)
 
     def close_board_connection(self):
         '''
