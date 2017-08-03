@@ -6,6 +6,7 @@ from microdrop.plugin_helpers import StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
                                       PluginGlobals)
 import conda_helpers as ch
+import mr_box_peripheral_board as mb
 import path_helpers as ph
 
 logger = logging.getLogger(__name__)
