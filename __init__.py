@@ -139,7 +139,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 logger.info('Reset board state to defaults.')
                 self.reset_board_state()
                 break
-            except serial.SerialException:
+            except (serial.SerialException, IOError):
                 time.sleep(1)
         else:
             # Serial connection to peripheral **could not be established**.
