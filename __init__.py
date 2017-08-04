@@ -137,8 +137,8 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 # ----
                 if step_options.get('pump'):
                     # Launch pump control dialog.
-                    frequency_hz = step_options.get('frequency_hz')
-                    duration_s = step_options.get('duration_s')
+                    frequency_hz = step_options.get('pump_frequency_hz')
+                    duration_s = step_options.get('pump_duration_s')
                     self.pump_control_dialog(frequency_hz, duration_s)
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
