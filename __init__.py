@@ -1,12 +1,15 @@
 import logging
 import time
 
-from flatland import Boolean, Form
+from flatland import Boolean, Float, Form, PropertyMapper, ValueAtLeast
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
                                       PluginGlobals)
+from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import conda_helpers as ch
+import gobject
+import gtk
 import mr_box_peripheral_board as mrbox
 import path_helpers as ph
 import serial
@@ -34,7 +37,29 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         version = 'v0.0.0+unknown'
 
     StepFields = Form.of(Boolean.named('magnet_engaged')
-                         .using(default=False, optional=True))
+                         .using(default=False, optional=True),
+                         Boolean.named('pump').using(default=False,
+                                                     optional=True),
+                         # Only allow pump frequency to be set if `pump` field
+                         # is set to `True`.
+                         Float.named('pump_frequency_hz')
+                         .using(default=1000, optional=True,
+                                validators=[ValueAtLeast(minimum=1)],
+                                properties={'mappers':
+                                            [PropertyMapper('sensitive',
+                                                            attr='pump'),
+                                             PropertyMapper('editable',
+                                                            attr='pump')]}),
+                         # Only allow pump duration to be set if `pump` field
+                         # is set to `True`.
+                         Float.named('pump_duration_s')
+                         .using(default=2, optional=True,
+                                validators=[ValueAtLeast(minimum=.1)],
+                                properties={'mappers':
+                                            [PropertyMapper('sensitive',
+                                                            attr='pump'),
+                                             PropertyMapper('editable',
+                                                            attr='pump')]}))
 
     def __init__(self):
         super(MrBoxPeripheralBoardPlugin, self).__init__()
@@ -70,9 +95,13 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         if not self.board.zstage_at_home():
             logger.warning('Unable to verify z-stage is in homed position.')
 
-        # TODO Reset remainder board state
         # Deactivate the pump.
+        self.board.pump_deactivate()
         # Set pump frequency to zero.
+        self.board.pump_frequency_set(0)
+
+        # TODO Reset remainder board state
+
         # Close the PMT shutter.
         # Set PMT control voltage to zero.
 
@@ -90,6 +119,9 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             # Apply board hardware options.
             try:
                 board_config = self.board.config
+
+                # Magnet z-stage
+                # --------------
                 if step_options.get('magnet_engaged'):
                     # Choose magnet "up" position.
                     position = board_config.zstage_up_position
@@ -98,6 +130,14 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                     position = board_config.zstage_down_position
                 # Send board request to move magnet to position.
                 self.board.zstage.move_to(position)
+
+                # Pump
+                # ----
+                if step_options.get('pump'):
+                    # Launch pump control dialog.
+                    frequency_hz = step_options.get('frequency_hz')
+                    duration_s = step_options.get('duration_s')
+                    self.pump_control_dialog(frequency_hz, duration_s)
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
@@ -106,6 +146,28 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                            'not connected.', __name__, exc_info=True)
             # Do not warn user again until after the next connection attempt.
             self._user_warned = True
+
+    def pump_control_dialog(self, frequency_hz, duration_s):
+        # `PumpControl` class uses threads.  Need to initialize GTK to use threads.
+        # See [here][1] for more information.
+        #
+        # [1]: http://faq.pygtk.org/index.py?req=show&file=faq20.001.htp
+        gtk.gdk.threads_init()
+
+        # Create pump control view widget.
+        pump_control_view = PumpControl(self.board, frequency_hz=frequency_hz,
+                                        duration_s=duration_s)
+
+        # Start pump automatically.
+        gobject.idle_add(pump_control_view.start)
+
+        # Create dialog window to wrap pump control view widget.
+        dialog = gtk.Dialog()
+        dialog.get_content_area().pack_start(pump_control_view.widget, True, True)
+        dialog.set_position(gtk.WIN_POS_MOUSE)
+        dialog.show_all()
+        dialog.run()
+        dialog.destroy()
 
     def open_board_connection(self):
         '''
@@ -120,7 +182,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         # [1]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py/issues/1
         # [2]: https://github.com/wheeler-microfluidics/mr-box-peripheral-board.py
         retry_count = 2
-        for i in xrange(retry_count):    
+        for i in xrange(retry_count):
             try:
                 self.board.close()
                 self.board = None
@@ -130,7 +192,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             try:
                 self.board = mrbox.SerialProxy(baudrate=57600,
                                                settling_time_s=2.5)
-                
+
                 # Serial connection to peripheral **successfully established**.
                 logger.info('Serial connection to peripheral board **successfully'
                             ' established** on port `%s`', self.board.port)
