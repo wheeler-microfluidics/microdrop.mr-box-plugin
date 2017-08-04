@@ -1,18 +1,20 @@
+import datetime as dt
 import logging
 import time
 
-from flatland import Boolean, Float, Form
-from flatland.validation import ValueAtLeast
+from flatland import Boolean, Float, Form, Integer
+from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
-from microdrop.plugin_manager import (IPlugin, Plugin, implements,
-                                      PluginGlobals, emit_signal)
+from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
+                                      get_service_instance_by_name,
+                                      PluginGlobals)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
-import conda_helpers as ch
 import gobject
 import gtk
 import mr_box_peripheral_board as mrbox
+import mr_box_peripheral_board.ui.gtk.measure_dialog
 import path_helpers as ph
 import serial
 
@@ -34,12 +36,29 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
 
     plugin_name = ph.path(__file__).realpath().parent.name
     try:
-        version = ch.package_version(plugin_name).get('version')
+        version = __version__
     except NameError:
         version = 'v0.0.0+unknown'
 
     StepFields = Form.of(Boolean.named('magnet_engaged')
                          .using(default=False, optional=True),
+                         Boolean.named('measure_PMT')
+                         .using(default=False, optional=True),
+                         Integer.named('PMT_duration_s')
+                         .using(default=30, optional=True,
+                                validators= [ValueAtLeast(minimum=1)],
+                                properties=
+                                {'mappers':
+                                 [PropertyMapper('sensitive',
+                                                 attr='measure_PMT')]}),
+                         Integer.named('PMT_digipot')
+                         .using(default=230, optional=True,
+                                validators= [ValueAtLeast(minimum=0),
+                                             ValueAtMost(maximum=255)],
+                                properties=
+                                {'mappers':
+                                 [PropertyMapper('sensitive',
+                                                 attr='measure_PMT')]}),
                          Boolean.named('pump').using(default=False,
                                                      optional=True),
                          # Only allow pump frequency to be set if `pump` field
@@ -101,11 +120,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         self.board.pump_deactivate()
         # Set pump frequency to zero.
         self.board.pump_frequency_set(0)
-
-        # TODO Reset remainder board state
-
         # Close the PMT shutter.
+        self.board.pmt_close_shutter()
         # Set PMT control voltage to zero.
+        self.board.pmt_set_pot(0)
 
     def apply_step_options(self, step_options):
         '''
@@ -140,6 +158,46 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                     frequency_hz = step_options.get('pump_frequency_hz')
                     duration_s = step_options.get('pump_duration_s')
                     self.pump_control_dialog(frequency_hz, duration_s)
+
+                # PMT/ADC
+                # -------
+                if step_options.get('measure_PMT'):
+                    # Set PMT control voltage via digipot.
+                    pmt_digipot = step_options.get('PMT_digipot')
+                    self.board.pmt_set_pot(pmt_digipot)
+                    # Launch PMT measure dialog.
+                    delta_t = dt.timedelta(seconds=1)
+                    # Construct a function compatible with `measure_dialog` to
+                    # read from MAX11210 ADC.
+                    data_func = (mrbox.ui.gtk.measure_dialog
+                                 .adc_data_func_factory(proxy=self.board,
+                                                        delta_t=delta_t))
+                    # Use constructed function to launch measurement dialog for
+                    # the duration specified by the step options.
+                    duration_s = step_options.get('PMT_duration_s')
+                    data = (mrbox.ui.gtk.measure_dialog
+                            .measure_dialog(data_func, duration_s=duration_s,
+                                            auto_start=True, auto_close=True))
+                    if data is not None:
+                        # Append measured data as JSON line to [new-line
+                        # delimited JSON][1] file for step.
+                        #
+                        # Each line of results can be loaded using
+                        # `pandas.read_json(...)`.
+                        #
+                        # [1]: http://ndjson.org/
+                        app = get_app()
+                        filename = ('PMT_readings-step%04d.ndjson' %
+                                    app.protocol.current_step_number)
+                        experiment_log_controller =\
+                            get_service_instance_by_name(
+                                "microdrop.gui.experiment_log_controller",
+                                "microdrop")
+                        log_dir = experiment_log_controller.get_log_path()
+                        log_dir.makedirs_p()
+                        with log_dir.joinpath(filename).open('a') as output:
+                            data.to_json(output)
+                            output.write('\n')
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
