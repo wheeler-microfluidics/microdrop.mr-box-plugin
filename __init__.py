@@ -1,9 +1,11 @@
 import logging
 import time
 
-from flatland import Boolean, Float, Form, PropertyMapper, ValueAtLeast
+from flatland import Boolean, Float, Form
+from flatland.validation import ValueAtLeast
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import StepOptionsController
+from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
                                       PluginGlobals)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
