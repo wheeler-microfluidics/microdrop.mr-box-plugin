@@ -7,7 +7,7 @@ from microdrop.app_context import get_app
 from microdrop.plugin_helpers import StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements,
-                                      PluginGlobals)
+                                      PluginGlobals, emit_signal)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import conda_helpers as ch
 import gobject
@@ -296,6 +296,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         options = self.get_step_options()
         # Apply step options
         self.apply_step_options(options)
+        emit_signal('on_step_complete', [self.name])
 
     def on_step_swapped(self, original_step_number, new_step_number):
         '''
