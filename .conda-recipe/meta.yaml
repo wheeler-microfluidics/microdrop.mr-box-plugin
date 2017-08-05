@@ -4,7 +4,7 @@ source:
   git_url: ../
 
 package:
-  name: microdrop.mr-box-peripheral-board-plugin
+  name: microdrop.mr-box-plugin
 
 {% if GIT_DESCRIBE_NUMBER > '0' %}
   version: {{ GIT_DESCRIBE_TAG[1:] }}+{{ GIT_DESCRIBE_NUMBER }}
@@ -47,5 +47,5 @@ test:
     - python -m mpm.bin.import_test -a {{ PKG_NAME }}
 
 about:
-  home: http://github.com/wheeler-microfluidics/microdrop.mr-box-peripheral-board-plugin
+  home: http://github.com/wheeler-microfluidics/microdrop.mr-box-plugin
   license: BSD

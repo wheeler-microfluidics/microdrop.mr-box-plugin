@@ -34,7 +34,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
     '''
     implements(IPlugin)
 
-    plugin_name = ph.path(__file__).realpath().parent.name
+    plugin_name = str(ph.path(__file__).realpath().parent.name)
     try:
         version = __version__
     except NameError:
@@ -259,6 +259,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 logger.info('Peripheral board properties:\n%s',
                             self.board.properties)
                 logger.info('Reset board state to defaults.')
+                import pdb; pdb.set_trace()
                 self.reset_board_state()
                 break
             except (serial.SerialException, IOError):
