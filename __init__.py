@@ -139,13 +139,13 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 # Magnet z-stage
                 # --------------
                 if step_options.get('Magnet'):
-                    # Choose magnet "up" position.
-                    position = board_config.zstage_up_position
+                    # Send board request to move magnet to position (if it is
+                    # already engaged, this function does nothing).
+                    self.board.zstage.up()
                 else:
-                    # Choose magnet "down" position.
-                    position = board_config.zstage_down_position
-                # Send board request to move magnet to position.
-                self.board.zstage.move_to(position)
+                    # Send board request to move magnet to down position (if
+                    # it is already engaged, this function does nothing).
+                    self.board.zstage.down()
 
                 # Pump
                 # ----
@@ -256,7 +256,6 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 logger.info('Peripheral board properties:\n%s',
                             self.board.properties)
                 logger.info('Reset board state to defaults.')
-                import pdb; pdb.set_trace()
                 self.reset_board_state()
                 break
             except (serial.SerialException, IOError):
