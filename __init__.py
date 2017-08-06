@@ -308,16 +308,11 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Handler called when a protocol starts running.
         '''
-        # Reset board state before executing protocol.  State will be updated
-        # during the execution of each step based on the selected step options.
-        self.reset_board_state()
 
     def on_protocol_pause(self):
         '''
         Handler called when a protocol is paused.
         '''
-        # Reset board state when stopping a protocol.
-        self.reset_board_state()
 
     def on_step_options_changed(self, plugin, step_number):
         '''
