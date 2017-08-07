@@ -370,7 +370,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         # Step options have changed.
         app = get_app()
-        if app.running or app.realtime_mode:
+        if app.realtime_mode:
             # Apply step options.
             options = self.get_step_options()
             self.apply_step_options(options)
