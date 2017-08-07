@@ -2,7 +2,7 @@ import datetime as dt
 import logging
 import time
 
-from flatland import Boolean, Float, Form, Integer, Enum
+from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import StepOptionsController
@@ -43,8 +43,11 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
 
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
+                         #PMT Fields
                          Boolean.named('Measure_PMT')
                          .using(default=False, optional=True),
+                         # Only allow PMT Duration to be set if `Measure_PMT` field
+                         # is set to `True`.
                          Integer.named('Measurement_duration_(s)')
                          .using(default=10, optional=True,
                                 validators= [ValueAtLeast(minimum=1)],
@@ -53,9 +56,21 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                                                             attr='Measure_PMT'),
                                              PropertyMapper('editable',
                                                             attr='Measure_PMT')]}),
+                         # Only allow ADC Gain to be set if `Measure_PMT` field
+                         # is set to `True`.
+                         #TODO Convert ADC Gain to dropdown list  with valid_values = (1,2,4,8,16)
+                         Integer.named('ADC_Gain')
+                         .using(default=1, optional=True,
+                                validators= [ValueAtLeast(minimum=1), ValueAtMost(maximum=16)],
+                                properties={'mappers':
+                                            [PropertyMapper('sensitive',
+                                                            attr='Measure_PMT'),
+                                             PropertyMapper('editable',
+                                                            attr='Measure_PMT')]}),
+                         #Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
-                         # Only allow pump frequency to be set if `pump` field
+                         # Only allow pump frequency to be set if `Pump` field
                          # is set to `True`.
                          Float.named('Pump_frequency_(hz)')
                          .using(default=1000, optional=True,
