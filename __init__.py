@@ -182,11 +182,14 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                     self.board.pmt_set_pot(pmt_digipot)
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
+                    #Set the digital gain of ADC
+                    adc_dgain = step_options.get('ADC_Gain')
                     # Construct a function compatible with `measure_dialog` to
                     # read from MAX11210 ADC.
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
-                                                        delta_t=delta_t))
+                                                        delta_t=delta_t,
+                                                        adc_dgain=adc_dgain))
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
