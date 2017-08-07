@@ -312,6 +312,15 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Handler called when a protocol is paused.
         '''
+        # Close the PMT shutter.
+        self.board.pmt_close_shutter()
+
+    def on_experiment_log_changed(self, experiment_log):
+        '''
+        Handler called when a new experiment starts.
+        '''
+        logger.info('Reset board state to defaults.')
+        self.reset_board_state()
 
     def on_step_options_changed(self, plugin, step_number):
         '''
