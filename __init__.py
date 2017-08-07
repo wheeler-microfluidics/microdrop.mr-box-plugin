@@ -80,10 +80,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                                                             attr='Pump'),
                                              PropertyMapper('editable',
                                                             attr='Pump')]}),
-                         # Only allow pump duration to be set if `pump` field
+                         # Only allow pump duration to be set if `Pump` field
                          # is set to `True`.
                          Float.named('Pump_duration_(s)')
-                         .using(default=2, optional=True,
+                         .using(default=.1, optional=True,
                                 validators=[ValueAtLeast(minimum=.1)],
                                 properties={'mappers':
                                             [PropertyMapper('sensitive',
