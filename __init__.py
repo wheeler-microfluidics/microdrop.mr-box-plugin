@@ -175,10 +175,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
-                    duration_s = step_options.get('Measurement_duration_(s)')
+                    duration_s = step_options.get('Measurement_duration_(s)')+1
                     data = (mrbox.ui.gtk.measure_dialog
                             .measure_dialog(data_func, duration_s=duration_s,
-                                            auto_start=True, auto_close=True))
+                                            auto_start=True, auto_close=False))
                     if data is not None:
                         # Append measured data as JSON line to [new-line
                         # delimited JSON][1] file for step.
