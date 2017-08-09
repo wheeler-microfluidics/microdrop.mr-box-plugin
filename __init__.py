@@ -9,7 +9,7 @@ from microdrop.plugin_helpers import StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
-                                      PluginGlobals)
+                                      PluginGlobals, ScheduleRequest)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import gobject
 import gtk
@@ -104,6 +104,9 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         # Flag to indicate whether user has already been warned about the board
         # not being connected when trying to set board state.
         self._user_warned = False
+
+        # `dropbot.SerialProxy` instance
+        self.dropbot_remote = None
 
     def reset_board_state(self):
         '''
@@ -261,7 +264,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             try:
                 self.board.close()
                 self.board = None
-            except:
+            except Exception:
                 pass
 
             try:
@@ -291,6 +294,17 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             # Close board connection and release serial connection.
             self.board.close()
 
+    def get_schedule_requests(self, function_name):
+        """
+        Returns a list of scheduling requests (i.e., ScheduleRequest
+        instances) for the function specified by function_name.
+        """
+        # TODO: this should be re-enabled once we can get the
+        # mr-box-peripheral-board to connect **after** the Dropbot.
+        #if function_name in ['on_plugin_enable']:
+        #    return [ScheduleRequest('dropbot_plugin', self.name)]
+        return []
+
     ###########################################################################
     # MicroDrop pyutillib plugin signal handlers
     # ------------------------------------------
@@ -308,6 +322,30 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             pass
         self.open_board_connection()
 
+    def initialize_connection_with_dropbot(self):
+        '''
+        If the dropbot plugin is installed and enabled, try getting its
+        reference.
+        '''
+        try:
+            service = get_service_instance_by_name('dropbot_plugin')
+            if service.enabled():
+                self.dropbot_remote = service.control_board
+            assert(self.dropbot_remote.properties.package_name == 'dropbot')
+        except Exception:
+            logger.debug('[%s] Could not communicate with Dropbot.', __name__,
+                         exc_info=True)
+            logger.warning('Could not communicate with DropBot.')
+
+        try:
+            if self.dropbot_remote:
+                env = self.dropbot_remote.get_environment_state()
+                logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
+                            (env['temperature_celsius'],
+                             100 * env['relative_humidity']))
+        except Exception:
+            logger.warning('Could not get temperature/humidity data.')
+ 
     def on_plugin_disable(self):
         '''
         Handler called when plugin is disabled.
@@ -325,6 +363,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Handler called when a protocol starts running.
         '''
+        # TODO: this should be run in on_plugin_enable; however, the
+        # mr-box-peripheral-board seems to have trouble connecting **after**
+        # the DropBot has connected.
+        self.initialize_connection_with_dropbot()
 
     def on_protocol_pause(self):
         '''
@@ -373,6 +415,20 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         options = self.get_step_options()
         # Apply step options
         self.apply_step_options(options)
+
+        # log environmental data
+        try:
+            app = get_app()
+            env = self.dropbot_remote.get_environment_state()
+            app.experiment_log.add_data({"environment": env}, self.name)
+            logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
+                        (env['temperature_celsius'],
+                         100 * env['relative_humidity']))
+
+        except Exception:
+            logger.debug('[%s] Failed to get environment data.', __name__,
+                          exc_info=True)
+ 
         emit_signal('on_step_complete', [self.name])
 
     def on_step_swapped(self, original_step_number, new_step_number):
