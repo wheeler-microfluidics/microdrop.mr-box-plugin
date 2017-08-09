@@ -264,7 +264,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             try:
                 self.board.close()
                 self.board = None
-            except:
+            except Exception:
                 pass
 
             try:
@@ -318,7 +318,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             if service.enabled():
                 self.dropbot_remote = service.control_board
             assert(self.dropbot_remote.properties.package_name == 'dropbot')
-        except:
+        except Exception:
             logger.debug('[%s] Could not communicate with Dropbot.', __name__,
                          exc_info=True)
             logger.warning('Could not communicate with DropBot.')
@@ -329,8 +329,8 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                 logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
                             (env['temperature_celsius'],
                              100 * env['relative_humidity']))
-            except:
-                logger.warning('Could not get temperature/humidity data.')
+        except Exception:
+            logger.warning('Could not get temperature/humidity data.')
  
     def on_plugin_disable(self):
         '''
@@ -403,6 +403,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             app = get_app()
             env = self.dropbot_remote.get_environment_state()
             app.experiment_log.add_data({"environment": env}, self.name)
+            logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
+                        (env['temperature_celsius'],
+                         100 * env['relative_humidity']))
+
         except Exception:
             logger.debug('[%s] Failed to get environment data.', __name__,
                           exc_info=True)
