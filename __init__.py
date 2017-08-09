@@ -105,6 +105,9 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         # not being connected when trying to set board state.
         self._user_warned = False
 
+        # `dropbot.SerialProxy` instance
+        self.dropbot_remote = None
+
     def reset_board_state(self):
         '''
         Reset MR-Box peripheral board to default state.
@@ -308,6 +311,27 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             pass
         self.open_board_connection()
 
+        # if the dropbot plugin is installed and enabled, try getting its
+        # reference
+        try:
+            service = get_service_instance_by_name('dropbot_plugin')
+            if service.enabled():
+                self.dropbot_remote = service.control_board
+            assert(self.dropbot_remote.properties.package_name == 'dropbot')
+        except:
+            logger.debug('[%s] Could not communicate with Dropbot.', __name__,
+                         exc_info=True)
+            logger.warning('Could not communicate with DropBot.')
+
+        try:
+            if self.dropbot_remote:
+                env = service.dropbot_remote.get_environment_state()
+                logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
+                            (env['temperature_celsius'],
+                             100 * env['relative_humidity']))
+            except:
+                logger.warning('Could not get temperature/humidity data.')
+ 
     def on_plugin_disable(self):
         '''
         Handler called when plugin is disabled.
@@ -373,6 +397,16 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         options = self.get_step_options()
         # Apply step options
         self.apply_step_options(options)
+
+        # log environmental data
+        try:
+            app = get_app()
+            env = self.dropbot_remote.get_environment_state()
+            app.experiment_log.add_data({"environment": env}, self.name)
+        except Exception:
+            logger.debug('[%s] Failed to get environment data.', __name__,
+                          exc_info=True)
+ 
         emit_signal('on_step_complete', [self.name])
 
     def on_step_swapped(self, original_step_number, new_step_number):
