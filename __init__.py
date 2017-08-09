@@ -9,7 +9,7 @@ from microdrop.plugin_helpers import StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
-                                      PluginGlobals)
+                                      PluginGlobals, ScheduleRequest)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import gobject
 import gtk
@@ -299,11 +299,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         Returns a list of scheduling requests (i.e., ScheduleRequest
         instances) for the function specified by function_name.
         """
-        if function_name in ['on_plugin_enable']:
-            return [ScheduleRequest(
-                                    self.name,
-                                    'dropbot_plugin'),
-                    ]
+        # TODO: this should be re-enabled once we can get the
+        # mr-box-peripheral-board to connect **after** the Dropbot.
+        #if function_name in ['on_plugin_enable']:
+        #    return [ScheduleRequest('dropbot_plugin', self.name)]
         return []
 
     ###########################################################################
@@ -323,8 +322,11 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             pass
         self.open_board_connection()
 
-        # if the dropbot plugin is installed and enabled, try getting its
-        # reference
+    def initialize_connection_with_dropbot(self):
+        '''
+        If the dropbot plugin is installed and enabled, try getting its
+        reference.
+        '''
         try:
             service = get_service_instance_by_name('dropbot_plugin')
             if service.enabled():
@@ -337,7 +339,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
 
         try:
             if self.dropbot_remote:
-                env = service.dropbot_remote.get_environment_state()
+                env = self.dropbot_remote.get_environment_state()
                 logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
                             (env['temperature_celsius'],
                              100 * env['relative_humidity']))
@@ -361,6 +363,10 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         '''
         Handler called when a protocol starts running.
         '''
+        # TODO: this should be run in on_plugin_enable; however, the
+        # mr-box-peripheral-board seems to have trouble connecting **after**
+        # the DropBot has connected.
+        self.initialize_connection_with_dropbot()
 
     def on_protocol_pause(self):
         '''
