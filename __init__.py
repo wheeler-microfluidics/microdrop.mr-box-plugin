@@ -19,6 +19,8 @@ import path_helpers as ph
 import serial
 from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 
+import time
+
 logger = logging.getLogger(__name__)
 
 from ._version import get_versions
@@ -134,6 +136,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         # Set PMT control voltage to zero.
         self.board.pmt_set_pot(0)
         #Start the ADC and Perform ADC Calibration
+        #TODO move MAX11210_begin to the first background measurement
         MAX11210_begin(self.board)
 
     def apply_step_options(self, step_options):
@@ -168,7 +171,19 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                     # Launch pump control dialog.
                     frequency_hz = step_options.get('Pump_frequency_(hz)')
                     duration_s = step_options.get('Pump_duration_(s)')
-                    self.pump_control_dialog(frequency_hz, duration_s)
+                    #self.pump_control_dialog(frequency_hz, duration_s)
+                    self.board.pump_frequency_set(frequency_hz)
+                    self.board.pump_activate()
+                    start_time = time.time()
+                    end_time = start_time
+                    dt = end_time - start_time
+                    while(dt < duration_s):
+                        end_time = time.time()
+                        dt = end_time - start_time
+                        time.sleep(0.01)
+                        #pump
+                    self.board.pump_deactivate()
+
 
                 # PMT/ADC
                 # -------
