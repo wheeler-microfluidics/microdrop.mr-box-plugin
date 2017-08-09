@@ -294,6 +294,18 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
             # Close board connection and release serial connection.
             self.board.close()
 
+    def get_schedule_requests(self, function_name):
+        """
+        Returns a list of scheduling requests (i.e., ScheduleRequest
+        instances) for the function specified by function_name.
+        """
+        if function_name in ['on_plugin_enable']:
+            return [ScheduleRequest(
+                                    self.name,
+                                    'dropbot_plugin'),
+                    ]
+        return []
+
     ###########################################################################
     # MicroDrop pyutillib plugin signal handlers
     # ------------------------------------------
