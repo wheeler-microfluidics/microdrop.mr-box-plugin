@@ -7,6 +7,7 @@ from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
+from pygtkhelpers.ui.dialogs import yesno
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
@@ -18,6 +19,8 @@ import mr_box_peripheral_board.ui.gtk.measure_dialog
 import path_helpers as ph
 import serial
 from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
+import numpy as np
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +173,33 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
                 # ----
                 if step_options.get('Pump'):
                     # Launch pump control dialog.
-                    frequency_hz = step_options.get('Pump_frequency_(hz)')
-                    duration_s = step_options.get('Pump_duration_(s)')
-                    self.pump_control_dialog(frequency_hz, duration_s)
+                    if self.autopump == False:
+                        frequency_hz = step_options.get('Pump_frequency_(hz)')
+                        duration_s = step_options.get('Pump_duration_(s)')
+                        self.pump_control_dialog(frequency_hz, duration_s)
+                    else:
+                        self.board.pump_frequency_set(8000)
+                        state[24] = 1
+                        self.dropbot_remote.state_of_channels = state
 
+                        cap = 0
+                        max_cp = round(self.max_capacitance, 12)
+                        start_time = time.time()
+                        end_time = start_time
+                        dt = end_time-start_time
+                        while ((cap< max_cp) and (dt<5)):
+                            self.board.pump_activate()
+                            x = []
+                            for i in range(0,10):
+                                x.append(self.dropbot_remote.measure_capacitance())
+                            cap = sum(x)/len(x)
+                            end_time = time.time()
+                            dt = end_time-start_time
+                            self.board.pump_deactivate()
+                        # for i in range(0,100):
+                        #     x.append(self.dropbot_remote.measure_capacitance())
+                        # cap = sum(x)/len(x)
+                        logger.info('Capacitance of filled reservoir: %s'%cap)
                 # PMT/ADC
                 # -------
                 if step_options.get('Measure_PMT'):
@@ -378,6 +404,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         '''
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
+        #TODO stop pump
 
     def on_experiment_log_changed(self, experiment_log):
         '''
@@ -385,6 +412,40 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         '''
         logger.info('Reset board state to defaults.')
         self.reset_board_state()
+
+        self.initialize_connection_with_dropbot()
+        #Auto Pump
+        response = yesno('New Device?')
+        if (response == gtk.RESPONSE_YES):
+            #Turn on Channel 24 - Pump reservoir
+            self.dropbot_remote.hv_output_enabled = True
+            self.dropbot_remote.hv_output_selected = True
+            self.dropbot_remote.voltage = 100
+            state = np.zeros(self.dropbot_remote.number_of_channels)
+            state[24] = 1
+            self.dropbot_remote.state_of_channels = state
+            logger.warning('Please load the reservoir with 7.5 uL WB')
+            self.max_capacitance = 0
+            mc=[]
+            for i in range(0,100):
+                mc.append(self.dropbot_remote.measure_capacitance())
+            self.max_capacitance = sum(mc)/len(mc)
+            logger.info('Capacitance of reservoir: %s'%self.max_capacitance)
+            state[24] = 0
+            self.dropbot_remote.state_of_channels = state
+
+            # self.dropbot_remote.hv_output_enabled = False
+            # self.dropbot_remote.hv_output_selected = False
+
+            self.autopump = True
+        elif (response == gtk.RESPONSE_YES or response == None):
+            try:
+                if self.max_capacitance == 0:
+                    self.autopump = False
+                else:
+                    self.autopump = True
+            except Exception:
+                pass
 
     def on_step_options_changed(self, plugin, step_number):
         '''
