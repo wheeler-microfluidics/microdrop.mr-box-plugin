@@ -5,11 +5,11 @@ import time
 from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
-from microdrop.plugin_helpers import StepOptionsController
+from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
-                                      PluginGlobals, ScheduleRequest)
+                                      PluginGlobals)
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import gobject
 import gtk
@@ -29,7 +29,7 @@ del get_versions
 PluginGlobals.push_env('microdrop.managed')
 
 
-class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
+class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugin):
     '''
     This class is automatically registered with the PluginManager.
     '''
@@ -40,6 +40,9 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         version = __version__
     except NameError:
         version = 'v0.0.0+unknown'
+
+    AppFields = Form.of(Boolean.named('Use PMT y-axis SI units')
+                        .using(default=True, optional=True))
 
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
@@ -195,9 +198,12 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
                     duration_s = step_options.get('Measurement_duration_(s)')+1
+                    app_values = self.get_app_values()
+                    use_si_prefixes = app_values.get('Use PMT y-axis SI prefixes')
                     data = (mrbox.ui.gtk.measure_dialog
                             .measure_dialog(data_func, duration_s=duration_s,
-                                            auto_start=True, auto_close=False))
+                                            auto_start=True, auto_close=False,
+                                            si_units=use_si_prefixes))
                     if data is not None:
                         # Append measured data as JSON line to [new-line
                         # delimited JSON][1] file for step.
@@ -343,7 +349,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
                              100 * env['relative_humidity']))
         except Exception:
             logger.warning('Could not get temperature/humidity data.')
- 
+
     def on_plugin_disable(self):
         '''
         Handler called when plugin is disabled.
@@ -426,7 +432,7 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         except Exception:
             logger.debug('[%s] Failed to get environment data.', __name__,
                           exc_info=True)
- 
+
         emit_signal('on_step_complete', [self.name])
 
     def on_step_swapped(self, original_step_number, new_step_number):
