@@ -152,8 +152,6 @@ class MrBoxPeripheralBoardPlugin(Plugin, StepOptionsController):
         if self.board is not None:
             # Apply board hardware options.
             try:
-                board_config = self.board.config
-
                 # Magnet z-stage
                 # --------------
                 if step_options.get('Magnet'):
