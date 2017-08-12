@@ -1,6 +1,7 @@
 import datetime as dt
 import logging
 import time
+import serial
 
 from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
@@ -10,14 +11,17 @@ from pygtkhelpers.ui.objectlist import PropertyMapper
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
-from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 import gobject
 import gtk
+import path_helpers as ph
+import microdrop_utility as utility
+from microdrop_utility.gui import yesno
+
+from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
-import path_helpers as ph
-import serial
-from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
+from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
+
 
 logger = logging.getLogger(__name__)
 
@@ -272,8 +276,28 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
                 pass
 
             try:
-                self.board = mrbox.SerialProxy(baudrate=57600,
-                                               settling_time_s=2.5)
+                self.board = mrbox.SerialProxy()
+
+                host_software_version = utility.Version.fromstring(
+                    str(self.board.host_software_version))
+                remote_software_version = utility.Version.fromstring(
+                    str(self.board.remote_software_version))
+
+                # Offer to reflash the firmware if the major and minor versions
+                # are not not identical. If micro versions are different,
+                # the firmware is assumed to be compatible. See [1]
+                #
+                # [1]: https://github.com/wheeler-microfluidics/base-node-rpc/
+                #              issues/8
+                if (host_software_version.major != remote_software_version.major or
+                    host_software_version.minor != remote_software_version.minor):
+                    response = yesno("The MR-box peripheral board firmware "
+                                     "version (%s) does not match the driver "
+                                     "version (%s). Update firmware?" % 
+                                     (remote_software_version,
+                                      host_software_version))
+                    if response == gtk.RESPONSE_YES:
+                        self.on_flash_firmware()
 
                 # Serial connection to peripheral **successfully established**.
                 logger.info('Serial connection to peripheral board **successfully'
@@ -289,6 +313,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
             # Serial connection to peripheral **could not be established**.
             logger.warning('Serial connection to peripheral board could not '
                            'be established.')
+
+    def on_flash_firmware(self, widget=None, data=None):
+        app = get_app()
+        try:
+            self.board.flash_firmware()
+            app.main_window_controller.info("Firmware updated successfully.",
+                                            "Firmware update")
+        except Exception, why:
+            logger.error("Problem flashing firmware. ""%s" % why)
 
     def close_board_connection(self):
         '''
