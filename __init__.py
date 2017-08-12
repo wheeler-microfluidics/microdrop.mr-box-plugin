@@ -8,6 +8,9 @@ from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
+from pygtkhelpers.utils import dict_to_form
+from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
+
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
@@ -15,7 +18,6 @@ import gobject
 import gtk
 import path_helpers as ph
 import microdrop_utility as utility
-from microdrop_utility.gui import yesno
 
 from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 import mr_box_peripheral_board as mrbox
@@ -114,6 +116,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
 
         # `dropbot.SerialProxy` instance
         self.dropbot_remote = None
+
+        # Latch to, e.g., config menus, only once
+        self.initialized = False
 
     def reset_board_state(self):
         '''
@@ -305,7 +310,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
                 logger.info('Peripheral board properties:\n%s',
                             self.board.properties)
                 logger.info('Reset board state to defaults.')
-                self.reset_board_state()
                 break
             except (serial.SerialException, IOError):
                 time.sleep(1)
@@ -313,6 +317,17 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
             # Serial connection to peripheral **could not be established**.
             logger.warning('Serial connection to peripheral board could not '
                            'be established.')
+
+    def on_edit_configuration(self, widget=None, data=None):
+        '''
+        Display a dialog to manually edit the configuration settings.
+        '''
+        config = self.board.config
+        form = dict_to_form(config)
+        dialog = FormViewDialog(form, 'Edit configuration settings')
+        valid, response = dialog.run()
+        if valid:
+            self.board.update_config(**response)
 
     def on_flash_firmware(self, widget=None, data=None):
         app = get_app()
@@ -353,12 +368,33 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         For example, when the MicroDrop application is **launched**, or when
         the plugin is **enabled** from the plugin manager dialog.
         '''
+        self.open_board_connection()
+        self.reset_board_state()
+        if not self.initialized:
+            app = get_app()
+            self.tools_menu_item = gtk.MenuItem("MR-Box")
+            app.main_window_controller.menu_tools.append(self.tools_menu_item)
+            self.tools_menu = gtk.Menu()
+            self.tools_menu_item.set_submenu(self.tools_menu)
+            
+            self.edit_config_menu_item = \
+                gtk.MenuItem("Edit configuration settings...")
+            self.tools_menu.append(self.edit_config_menu_item)
+            self.edit_config_menu_item.connect("activate",
+                                               self.on_edit_configuration)
+            self.edit_config_menu_item.show()
+            self.initialized = True
+
+        # if we're connected to the board, display the menu
+        if self.board:
+            self.tools_menu.show()
+            self.tools_menu_item.show()
+        
         try:
             super(MrBoxPeripheralBoardPlugin, self).on_plugin_enable()
         except AttributeError:
             pass
-        self.open_board_connection()
-
+       
     def initialize_connection_with_dropbot(self):
         '''
         If the dropbot plugin is installed and enabled, try getting its
@@ -395,6 +431,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         except AttributeError:
             pass
         self.close_board_connection()
+        self.tools_menu.hide()
+        self.tools_menu_item.hide()
 
     def on_protocol_run(self):
         '''
