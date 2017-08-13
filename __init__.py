@@ -19,7 +19,8 @@ import gtk
 import path_helpers as ph
 import microdrop_utility as utility
 
-from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
+from mr_box_peripheral_board.max11210_adc_ui import (MAX11210_begin,
+                                                     MAX11210_status)
 import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
@@ -35,7 +36,8 @@ del get_versions
 PluginGlobals.push_env('microdrop.managed')
 
 
-class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugin):
+class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
+                                 Plugin):
     '''
     This class is automatically registered with the PluginManager.
     '''
@@ -151,7 +153,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         #Start the ADC and Perform ADC Calibration
         MAX11210_begin(self.board)
         MAX11210_status(self.board)
-        
+
     def apply_step_options(self, step_options):
         '''
         Apply the specified step options.
