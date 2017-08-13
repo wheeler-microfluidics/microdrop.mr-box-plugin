@@ -150,7 +150,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         self.board.pmt_set_pot(0)
         #Start the ADC and Perform ADC Calibration
         MAX11210_begin(self.board)
-
+        MAX11210_status(self.board)
+        
     def apply_step_options(self, step_options):
         '''
         Apply the specified step options.
@@ -186,12 +187,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
                 # PMT/ADC
                 # -------
                 if step_options.get('Measure_PMT'):
-                    #TODO expose PMT Control Voltage as a predifined setting
-                    ''' Set PMT control voltage via digipot.
-                    For now manually set PMT Control Voltage to 1000mV --> 1KV on PMT'''
-                    VControl = 1000
+                    #Start the ADC and Perform ADC Calibration
+                    MAX11210_begin(self.board)
+                    ''' Set PMT control voltage via digipot.'''
                     #Divide the control voltage by the maximum 1100 mV and convert it to digipot steps
-                    pmt_digipot = int((VControl/1100.)*255)
+                    pmt_digipot = int((self.board.config.pmt_control_voltage/1100.)*255)
                     self.board.pmt_set_pot(pmt_digipot)
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
@@ -298,7 +298,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
                     host_software_version.minor != remote_software_version.minor):
                     response = yesno("The MR-box peripheral board firmware "
                                      "version (%s) does not match the driver "
-                                     "version (%s). Update firmware?" % 
+                                     "version (%s). Update firmware?" %
                                      (remote_software_version,
                                       host_software_version))
                     if response == gtk.RESPONSE_YES:
@@ -376,7 +376,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
             app.main_window_controller.menu_tools.append(self.tools_menu_item)
             self.tools_menu = gtk.Menu()
             self.tools_menu_item.set_submenu(self.tools_menu)
-            
+
             self.edit_config_menu_item = \
                 gtk.MenuItem("Edit configuration settings...")
             self.tools_menu.append(self.edit_config_menu_item)
@@ -389,12 +389,12 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         if self.board:
             self.tools_menu.show()
             self.tools_menu_item.show()
-        
+
         try:
             super(MrBoxPeripheralBoardPlugin, self).on_plugin_enable()
         except AttributeError:
             pass
-       
+
     def initialize_connection_with_dropbot(self):
         '''
         If the dropbot plugin is installed and enabled, try getting its
