@@ -135,9 +135,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController, Plugi
         # TODO to respective `mr-box-peripheral-board.py` C++ classes code.
 
         # Home the magnet z-stage.
-        self.board.zstage_home()
+        self.board.zstage.home()
 
-        if not self.board.zstage_at_home():
+        if not self.board.zstage.is_down:
             logger.warning('Unable to verify z-stage is in homed position.')
 
         # Deactivate the pump.
