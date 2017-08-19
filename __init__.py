@@ -199,12 +199,14 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     delta_t = dt.timedelta(seconds=1)
                     #Set the digital gain of ADC
                     adc_dgain = step_options.get('ADC_Gain')
+                    #Set sampling reset_board_state
+                    adc_rate = self.board.config.pmt_sampling_rate
                     # Construct a function compatible with `measure_dialog` to
                     # read from MAX11210 ADC.
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_dgain=adc_dgain))
+                                                        adc_dgain=adc_dgain, adc_rate=adc_rate))
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
