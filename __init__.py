@@ -50,8 +50,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         version = 'v0.0.0+unknown'
 
     AppFields = Form.of(Boolean.named('Use PMT y-axis SI units')
-                        .using(default=True, optional=True))
-
+                        .using(default=True, optional=True),
+                        Float.named('LED 1 brightness')
+                        .using(default=0, optional=True,
+                               validators=[ValueAtLeast(minimum=0),
+                                           ValueAtMost(maximum=1)]),
+                        Float.named('LED 2 brightness')
+                        .using(default=0, optional=True,
+                               validators=[ValueAtLeast(minimum=0),
+                                           ValueAtMost(maximum=1)]))
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
                          #PMT Fields
@@ -61,7 +68,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                          # is set to `True`.
                          Integer.named('Measurement_duration_(s)')
                          .using(default=10, optional=True,
-                                validators= [ValueAtLeast(minimum=1)],
+                                validators= [ValueAtLeast(minimum=0)],
                                 properties={'mappers':
                                             [PropertyMapper('sensitive',
                                                             attr='Measure_PMT'),
@@ -154,6 +161,12 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         MAX11210_begin(self.board)
         MAX11210_status(self.board)
 
+        self.update_leds()
+
+        # Turn on the LEDs
+        self.board.led1.on = True
+        self.board.led2.on = True
+
     def apply_step_options(self, step_options):
         '''
         Apply the specified step options.
@@ -165,6 +178,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             for a protocol step.
         '''
         if self.board is not None:
+            # Save state of LEDs
+            led1_on = self.board.led1.on
+            led2_on = self.board.led2.on
+
             # Apply board hardware options.
             try:
                 # Magnet z-stage
@@ -189,6 +206,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 # PMT/ADC
                 # -------
                 if step_options.get('Measure_PMT'):
+                    # Turn off LEDs
+                    self.board.led1.on = False
+                    self.board.led2.on = False
+
                     #Start the ADC and Perform ADC Calibration
                     MAX11210_begin(self.board)
                     ''' Set PMT control voltage via digipot.'''
@@ -236,6 +257,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
+
+            finally:
+                self.board.led1.on = led1_on
+                self.board.led2.on = led2_on
+
         elif not self._user_warned:
             logger.warning('[%s] Cannot apply board settings since board is '
                            'not connected.', __name__, exc_info=True)
@@ -461,6 +487,32 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         logger.info('Reset board state to defaults.')
         self.reset_board_state()
 
+    def on_app_options_changed(self, plugin_name):
+        """
+        Handler called when the app options are changed for a particular
+        plugin.  This will, for example, allow for GUI elements to be
+        updated.
+        
+        Parameters
+        ----------
+        plugin : str
+            Plugin name for which the app options changed
+        """
+        app = get_app()
+        if plugin_name == self.name:
+            self.update_leds()
+
+    def update_leds(self):
+        app_values = self.get_app_values()
+        
+        logger.info(app_values)
+ 
+        for k, v in app_values.items():
+            if k == 'LED 1 brightness':
+                self.board.led1.brightness = v
+            elif k == 'LED 2 brightness':
+                self.board.led2.brightness = v
+    
     def on_step_options_changed(self, plugin, step_number):
         '''
         Handler called when field values for the specified plugin and step.
