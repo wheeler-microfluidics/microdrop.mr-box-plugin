@@ -201,7 +201,20 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # Launch pump control dialog.
                     frequency_hz = step_options.get('Pump_frequency_(hz)')
                     duration_s = step_options.get('Pump_duration_(s)')
-                    self.pump_control_dialog(frequency_hz, duration_s)
+                   
+                    # Disable pump dialog
+                    # 
+                    # Still not sure what the best interface is for the pump,
+                    # but for now we will use a simple time/frequency step
+                    # option.
+                    use_pump_dialog = False
+                    if use_pump_dialog:
+                        self.pump_control_dialog(frequency_hz, duration_s)
+                    else:
+                        self.board.pump_frequency_set(frequency_hz)
+                        self.board.pump_activate()
+                        time.sleep(duration_s)
+                        self.board.pump_deactivate()
 
                 # PMT/ADC
                 # -------
