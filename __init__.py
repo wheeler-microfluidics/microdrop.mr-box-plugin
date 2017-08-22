@@ -540,7 +540,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         # Step options have changed.
         app = get_app()
 
-        if all([plugin == self.plugin_name, app.running or app.realtime_mode,
+        if all([plugin == self.plugin_name, app.realtime_mode,
                 step_number == app.protocol.current_step_number]):
             # Apply step options.
             options = self.get_step_options()
@@ -588,10 +588,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         # Step options have changed.
         app = get_app()
-        if app.realtime_mode:
+        if app.realtime_mode and not app.running:
             # Apply step options.
             options = self.get_step_options()
             self.apply_step_options(options)
-
 
 PluginGlobals.pop_env()
