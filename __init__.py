@@ -193,7 +193,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 else:
                     # Send board request to move magnet to down position (if
                     # it is already engaged, this function does nothing).
-                    self.board.zstage.down()
+                    #Move to low position and then home
+                    #used to save time and avoid magnet going beyong the endstop
+                    #and loosing steps
+                    self.board.zstage.moveto(1)
+                    self.board.zstage.home()
 
                 # Pump
                 # ----
@@ -202,10 +206,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         frequency_hz = step_options.get('Pump_frequency_(hz)')
                         duration_s = step_options.get('Pump_duration_(s)')
                         # Disable pump dialog
-                        # 
-                        # Still not sure what the best interface is for the pump,
-                        # but for now we will use a simple time/frequency step
-                        # option.
                         use_pump_dialog = False
                         if use_pump_dialog:
                             # Launch pump control dialog.
@@ -219,7 +219,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         self.board.pump_frequency_set(8000)
                         state[24] = 1
                         self.dropbot_remote.state_of_channels = state
-
                         cap = 0
                         max_cp = round(self.max_capacitance, 12)
                         start_time = time.time()
@@ -234,9 +233,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             end_time = time.time()
                             dt = end_time-start_time
                             self.board.pump_deactivate()
-                        # for i in range(0,100):
-                        #     x.append(self.dropbot_remote.measure_capacitance())
-                        # cap = sum(x)/len(x)
                         logger.info('Capacitance of filled reservoir: %s'%cap)
                 # PMT/ADC
                 # -------
@@ -281,6 +277,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         # `pandas.read_json(...)`.
                         #
                         # [1]: http://ndjson.org/
+                        #TODO --High Priotity-- log PMT readings in excel
                         app = get_app()
                         filename = ('PMT_readings-step%04d.ndjson' %
                                     app.protocol.current_step_number)
@@ -522,47 +519,50 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         logger.info('Reset board state to defaults.')
         self.reset_board_state()
-        
+
         self.initialize_connection_with_dropbot()
         #Auto Pump
-        response = yesno('New Device?')
-        if (response == gtk.RESPONSE_YES):
-            #Turn on Channel 24 - Pump reservoir
-            self.dropbot_remote.hv_output_enabled = True
-            self.dropbot_remote.hv_output_selected = True
-            self.dropbot_remote.voltage = 100
-            state = np.zeros(self.dropbot_remote.number_of_channels)
-            state[24] = 1
-            self.dropbot_remote.state_of_channels = state
-            logger.warning('Please load the reservoir with 7.5 uL WB')
-            self.max_capacitance = 0
-            mc=[]
-            for i in range(0,100):
-                mc.append(self.dropbot_remote.measure_capacitance())
-            self.max_capacitance = sum(mc)/len(mc)
-            logger.info('Capacitance of reservoir: %s'%self.max_capacitance)
-            state[24] = 0
-            self.dropbot_remote.state_of_channels = state
+        try:
+            response = yesno('Enable Auto Pump?')
+            if (response == gtk.RESPONSE_YES):
+                #Turn on Channel 24 - Pump reservoir
+                self.dropbot_remote.hv_output_enabled = True
+                self.dropbot_remote.hv_output_selected = True
+                self.dropbot_remote.voltage = 100
+                state = np.zeros(self.dropbot_remote.number_of_channels)
+                state[24] = 1
+                self.dropbot_remote.state_of_channels = state
+                logger.warning('Please load the reservoir with 7.5 uL WB')
+                self.max_capacitance = 0
+                mc=[]
+                for i in range(0,100):
+                    mc.append(self.dropbot_remote.measure_capacitance())
+                self.max_capacitance = sum(mc)/len(mc)
+                logger.info('Capacitance of reservoir: %s'%self.max_capacitance)
+                state[24] = 0
+                self.dropbot_remote.state_of_channels = state
 
-            # self.dropbot_remote.hv_output_enabled = False
-            # self.dropbot_remote.hv_output_selected = False
+                # self.dropbot_remote.hv_output_enabled = False
+                # self.dropbot_remote.hv_output_selected = False
 
-            self.autopump = True
-        elif (response == gtk.RESPONSE_YES or response == None):
-            try:
-                if self.max_capacitance == 0:
-                    self.autopump = False
-                else:
-                    self.autopump = True
-            except Exception:
-                pass
+                self.autopump = True
+            else:
+                try:
+                    if self.max_capacitance == 0:
+                        self.autopump = False
+                    else:
+                        self.autopump = True
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def on_app_options_changed(self, plugin_name):
         """
         Handler called when the app options are changed for a particular
         plugin.  This will, for example, allow for GUI elements to be
         updated.
-        
+
         Parameters
         ----------
         plugin : str
@@ -574,15 +574,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def update_leds(self):
         app_values = self.get_app_values()
-        
+
         logger.info(app_values)
- 
+
         for k, v in app_values.items():
             if k == 'LED 1 brightness':
                 self.board.led1.brightness = v
             elif k == 'LED 2 brightness':
                 self.board.led2.brightness = v
-    
+
     def on_step_options_changed(self, plugin, step_number):
         '''
         Handler called when field values for the specified plugin and step.
