@@ -208,9 +208,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # Launch pump control dialog.
                     frequency_hz = step_options.get('Pump_frequency_(hz)')
                     duration_s = step_options.get('Pump_duration_(s)')
-                   
+
                     # Disable pump dialog
-                    # 
+                    #
                     # Still not sure what the best interface is for the pump,
                     # but for now we will use a simple time/frequency step
                     # option.
@@ -244,9 +244,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         self.board.pmt_open_shutter()
                         try:
                             self.board.MAX11210_setGain(adc_dgain)
+                            reads = 0
                             for i in range(0,10):
-                                proxy.MAX11210_setRate(120)
-                                reading_i = proxy.MAX11210_getData()
+                                self.board.MAX11210_setRate(120)
+                                reading_i = self.board.MAX11210_getData()
                                 reads += reading_i
                         finally:
                             self.board.pmt_close_shutter()
@@ -270,7 +271,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                 adc_dgain /= 2
                         else:
                             break
-                    logger.info('ADC Digital Gain: %s ' %adc_dgain)
+                    logger.info('ADC Digital Gain set to: %s ' %adc_dgain)
 
                     # Get ADC Digital Gain from step options
                     # adc_dgain = step_options.get('ADC_Gain')
@@ -282,7 +283,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_dgain=adc_dgain, adc_rate=adc_rate))
+                                                        adc_dgain=adc_dgain,
+                                                        adc_rate=adc_rate))
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
@@ -547,7 +549,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         Handler called when the app options are changed for a particular
         plugin.  This will, for example, allow for GUI elements to be
         updated.
-        
+
         Parameters
         ----------
         plugin : str
@@ -559,15 +561,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def update_leds(self):
         app_values = self.get_app_values()
-        
+
         logger.info(app_values)
- 
+
         for k, v in app_values.items():
             if k == 'LED 1 brightness':
                 self.board.led1.brightness = v
             elif k == 'LED 2 brightness':
                 self.board.led2.brightness = v
-    
+
     def on_step_options_changed(self, plugin, step_number):
         '''
         Handler called when field values for the specified plugin and step.
