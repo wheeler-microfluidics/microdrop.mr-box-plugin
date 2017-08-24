@@ -193,7 +193,12 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 else:
                     # Send board request to move magnet to down position (if
                     # it is already engaged, this function does nothing).
-                    self.board.zstage.down()
+                    #Move to low position and then home
+                    #used to save time and avoid magnet going beyong the endstop
+                    #and loosing steps
+                    if not self.board.zstage.is_down:
+                        self.board.zstage.move_to(1)
+                        self.board.zstage.home()
 
                 # Pump
                 # ----
