@@ -11,7 +11,7 @@ from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from pygtkhelpers.utils import dict_to_form
 from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
-from pygtkhelpers.ui.dialogs import yesno
+
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
@@ -25,6 +25,7 @@ from mr_box_peripheral_board.max11210_adc_ui import (MAX11210_begin,
 import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
+
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         self.board.pump_deactivate()
         # Set pump frequency to zero.
         self.board.pump_frequency_set(0)
+        #Set the pmt shutter pin to output
+        self.board.pin_mode(9, 1)
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
         # Set PMT control voltage to zero.
@@ -196,44 +199,52 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     #Move to low position and then home
                     #used to save time and avoid magnet going beyong the endstop
                     #and loosing steps
-                    self.board.zstage.moveto(1)
-                    self.board.zstage.home()
+                    if not self.board.zstage.is_down:
+                        self.board.zstage.move_to(1)
+                        self.board.zstage.home()
 
                 # Pump
                 # ----
                 if step_options.get('Pump'):
-                    if self.autopump == False:
-                        frequency_hz = step_options.get('Pump_frequency_(hz)')
-                        duration_s = step_options.get('Pump_duration_(s)')
-                        # Disable pump dialog
-                        use_pump_dialog = False
-                        if use_pump_dialog:
-                            # Launch pump control dialog.
-                            self.pump_control_dialog(frequency_hz, duration_s)
-                        else:
-                            self.board.pump_frequency_set(frequency_hz)
-                            self.board.pump_activate()
-                            time.sleep(duration_s)
-                            self.board.pump_deactivate()
-                    else:
-                        self.board.pump_frequency_set(8000)
-                        state[24] = 1
-                        self.dropbot_remote.state_of_channels = state
-                        cap = 0
-                        max_cp = round(self.max_capacitance, 12)
-                        start_time = time.time()
-                        end_time = start_time
-                        dt = end_time-start_time
-                        while ((cap< max_cp) and (dt<5)):
-                            self.board.pump_activate()
-                            x = []
-                            for i in range(0,10):
-                                x.append(self.dropbot_remote.measure_capacitance())
-                            cap = sum(x)/len(x)
-                            end_time = time.time()
-                            dt = end_time-start_time
-                            self.board.pump_deactivate()
-                        logger.info('Capacitance of filled reservoir: %s'%cap)
+                    # Launch pump control dialog.
+					if self.autopump == False:
+						frequency_hz = step_options.get('Pump_frequency_(hz)')
+						duration_s = step_options.get('Pump_duration_(s)')
+					   
+						# Disable pump dialog
+						# 
+						# Still not sure what the best interface is for the pump,
+						# but for now we will use a simple time/frequency step
+						# option.
+						use_pump_dialog = False
+						if use_pump_dialog:
+							self.pump_control_dialog(frequency_hz, duration_s)
+						else:
+							self.board.pump_frequency_set(frequency_hz)
+							self.board.pump_activate()
+							time.sleep(duration_s)
+							self.board.pump_deactivate()
+					else:
+						self.board.pump_frequency_set(8000)
+							state[24] = 1
+							self.dropbot_remote.state_of_channels = state
+							cap = 0
+							max_cp = round(self.max_capacitance, 12)
+							start_time = time.time()
+							end_time = start_time
+							dt = end_time-start_time
+							while ((cap< max_cp) and (dt<5)):
+								self.board.pump_activate()
+
+								x = []
+								for i in range(0,10):
+									x.append(self.dropbot_remote.measure_capacitance())
+								cap = sum(x)/len(x)
+								end_time = time.time()
+								dt = end_time-start_time
+								self.board.pump_deactivate()
+
+							logger.info('Capacitance of filled reservoir: %s'%cap)
                 # PMT/ADC
                 # -------
                 if step_options.get('Measure_PMT'):
@@ -250,7 +261,42 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
                     #Set the digital gain of ADC
-                    adc_dgain = step_options.get('ADC_Gain')
+                    def auto_gain(adc_dgain):
+                        logger.info('Trying ADC Digital Gain: %s ' %adc_dgain)
+                        self.board.pmt_open_shutter()
+                        try:
+                            self.board.MAX11210_setGain(adc_dgain)
+                            for i in range(0,10):
+                                proxy.MAX11210_setRate(120)
+                                reading_i = proxy.MAX11210_getData()
+                                reads += reading_i
+                        finally:
+                            self.board.pmt_close_shutter()
+                        reads /= 10.0
+                        return reads
+
+                    adc_threshold = 2 ** 24 - 2**19
+                    adc_dgain = 16
+
+                    while True:
+                        # Check if we are saturating the ADC at this gain level
+                        if (auto_gain(adc_dgain) > adc_threshold):
+                            if adc_dgain == 1:
+                                # If we are still saturating at adc_dgain==1,
+                                # we are over range
+                                if (auto_gain(adc_dgain) >= (2 ** 24 - 1)):
+                                    logger.warning('PMT Overange!')
+                                break
+                            else:
+                                # Reduce the gain by half
+                                adc_dgain /= 2
+                        else:
+                            break
+                    logger.info('ADC Digital Gain: %s ' %adc_dgain)
+
+                    # Get ADC Digital Gain from step options
+                    # adc_dgain = step_options.get('ADC_Gain')
+
                     #Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
                     # Construct a function compatible with `measure_dialog` to
@@ -277,7 +323,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         # `pandas.read_json(...)`.
                         #
                         # [1]: http://ndjson.org/
-                        #TODO --High Priotity-- log PMT readings in excel
                         app = get_app()
                         filename = ('PMT_readings-step%04d.ndjson' %
                                     app.protocol.current_step_number)
@@ -511,7 +556,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
-        #TODO stop pump
 
     def on_experiment_log_changed(self, experiment_log):
         '''
@@ -519,13 +563,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         logger.info('Reset board state to defaults.')
         self.reset_board_state()
-
-        self.initialize_connection_with_dropbot()
-        #Auto Pump
+		
+		#Auto Pump
         try:
             response = yesno('Enable Auto Pump?')
             if (response == gtk.RESPONSE_YES):
-                #Turn on Channel 24 - Pump reservoir
+           		#Connect to Dropbot in order to use the 
+				#capacitance measurements
+				self.initialize_connection_with_dropbot()
+				#Turn on Channel 24 - Pump reservoir
                 self.dropbot_remote.hv_output_enabled = True
                 self.dropbot_remote.hv_output_selected = True
                 self.dropbot_remote.voltage = 100
@@ -542,27 +588,20 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 state[24] = 0
                 self.dropbot_remote.state_of_channels = state
 
-                # self.dropbot_remote.hv_output_enabled = False
-                # self.dropbot_remote.hv_output_selected = False
+                self.dropbot_remote.hv_output_enabled = False
+                self.dropbot_remote.hv_output_selected = False
 
                 self.autopump = True
             else:
-                try:
-                    if self.max_capacitance == 0:
-                        self.autopump = False
-                    else:
-                        self.autopump = True
-                except Exception:
-                    pass
+				self.autopump = False
         except Exception:
             pass
-
     def on_app_options_changed(self, plugin_name):
         """
         Handler called when the app options are changed for a particular
         plugin.  This will, for example, allow for GUI elements to be
         updated.
-
+        
         Parameters
         ----------
         plugin : str
@@ -574,15 +613,15 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def update_leds(self):
         app_values = self.get_app_values()
-
+        
         logger.info(app_values)
-
+ 
         for k, v in app_values.items():
             if k == 'LED 1 brightness':
                 self.board.led1.brightness = v
             elif k == 'LED 2 brightness':
                 self.board.led2.brightness = v
-
+    
     def on_step_options_changed(self, plugin, step_number):
         '''
         Handler called when field values for the specified plugin and step.
