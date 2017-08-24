@@ -153,6 +153,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         self.board.pump_deactivate()
         # Set pump frequency to zero.
         self.board.pump_frequency_set(0)
+        #Set the pmt shutter pin to output
+        self.board.pin_mode(9, 1)
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
         # Set PMT control voltage to zero.
