@@ -233,8 +233,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         map_cp = round(self.max_capacitance,12)
                         start_time = time.time()
                         end_time = start_time
-                        dt = end_time - start_time
-                        while ((cap < max_cp) and (dt < 5)):
+                        pump_time = end_time - start_time
+                        while ((cap < max_cp) and (pump_time < 5)):
                             self.board.pump_activate()
                             x = []
                             for i in range(0,10):
@@ -242,7 +242,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             self.board.pump_deactivate()
                             cap = sum(x) / len(x)
                             end_time = time.time()
-                            dt = end_time - start_time
+                            pump_time = end_time - start_time
                         logger.info('Capacitance of filled reservoir: %s'%cap)
 
                 # PMT/ADC
