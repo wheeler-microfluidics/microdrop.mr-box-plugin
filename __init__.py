@@ -180,7 +180,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             Dictionary containing the MR-Box peripheral board plugin options
             for a protocol step.
         '''
-        if self.board is not None:
+        if self.board:
             # Save state of LEDs
             led1_on = self.board.led1.on
             led2_on = self.board.led2.on
@@ -478,7 +478,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         the plugin is **enabled** from the plugin manager dialog.
         '''
         self.open_board_connection()
-        self.reset_board_state()
         if not self.initialized:
             app = get_app()
             self.tools_menu_item = gtk.MenuItem("MR-Box")
@@ -496,6 +495,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         # if we're connected to the board, display the menu
         if self.board:
+            self.reset_board_state()
             self.tools_menu.show()
             self.tools_menu_item.show()
 
@@ -564,7 +564,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         Handler called when a new experiment starts.
         '''
         logger.info('Reset board state to defaults.')
-        self.reset_board_state()
+        if self.board:
+            self.reset_board_state()
 
         #Initialize auto pump
         try:
@@ -610,7 +611,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             Plugin name for which the app options changed
         """
         app = get_app()
-        if plugin_name == self.name:
+        if plugin_name == self.name and self.board:
             self.update_leds()
 
     def update_leds(self):
