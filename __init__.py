@@ -3,6 +3,7 @@ import logging
 import time
 import serial
 
+import numpy as np
 from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
@@ -205,23 +206,44 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 # Pump
                 # ----
                 if step_options.get('Pump'):
-                    # Launch pump control dialog.
-                    frequency_hz = step_options.get('Pump_frequency_(hz)')
-                    duration_s = step_options.get('Pump_duration_(s)')
+                    if self.autopump == False:
+                        # Launch pump control dialog.
+                        frequency_hz = step_options.get('Pump_frequency_(hz)')
+                        duration_s = step_options.get('Pump_duration_(s)')
 
-                    # Disable pump dialog
-                    #
-                    # Still not sure what the best interface is for the pump,
-                    # but for now we will use a simple time/frequency step
-                    # option.
-                    use_pump_dialog = False
-                    if use_pump_dialog:
-                        self.pump_control_dialog(frequency_hz, duration_s)
+                        # Disable pump dialog
+                        #
+                        # Still not sure what the best interface is for the pump,
+                        # but for now we will use a simple time/frequency step
+                        # option.
+                        use_pump_dialog = False
+                        if use_pump_dialog:
+                            self.pump_control_dialog(frequency_hz, duration_s)
+                        else:
+                            self.board.pump_frequency_set(frequency_hz)
+                            self.board.pump_activate()
+                            time.sleep(duration_s)
+                            self.board.pump_deactivate()
                     else:
-                        self.board.pump_frequency_set(frequency_hz)
-                        self.board.pump_activate()
-                        time.sleep(duration_s)
-                        self.board.pump_deactivate()
+                        #Routine if auto pump is enabled
+                        self.board.pump_frequency_set(8000)
+                        state[24] = 1
+                        self.dropbot_remote.state_of_channels = state
+                        cap = 0
+                        map_cp = round(self.max_capacitance,12)
+                        start_time = time.time()
+                        end_time = start_time
+                        dt = end_time - start_time
+                        while ((cap < max_cp) and (dt < 5)):
+                            self.board.pump_activate()
+                            x = []
+                            for i in range(0,10):
+                                x.append(self.dropbot_remote.measure_capacitance())
+                            self.board.pump_deactivate()
+                            cap = sum(x) / len(x)
+                            end_time = time.time()
+                            dt = end_time - start_time
+                        logger.info('Capacitance of filled reservoir: %s'%cap)
 
                 # PMT/ADC
                 # -------
@@ -543,6 +565,38 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         logger.info('Reset board state to defaults.')
         self.reset_board_state()
+
+        #Initialize auto pump
+        try:
+            response = yesno('Enable Auto Pump?')
+            if (response == gtk.RESPONSE_YES):
+                #Connect Dropbot to receive capacitance measurements
+                self.initialize_connection_with_dropbot()
+                #Turn on Channel 24 (Pump reservoir)
+                self.dropbot_remote.hv_output_enabled = True
+                self.dropbot_remote.hv_output_selected = True
+                self.dropbot_remote.voltage = 100
+                state = np.zeros(self.dropbot_remote.number_of_channels)
+                state[24]  = 1
+                self.dropbot_remote.state_of_channels = state
+                logger.warning('Please load the reservoir with 7.5 uL WB')
+                self.max_capacitance = 0
+                mc = []
+                for i in range(0,100):
+                    mc.append(self.dropbot_remote.measure_capacitance())
+                self.max_capacitance = sum(mc) / len(mc)
+                logger.info('Capacitance of reservoir: %s'%self.max_capacitance)
+                state[24] = 0
+                self.dropbot_remote.state_of_channels = state
+
+                self.dropbot_remote.hv_output_enabled = False
+                self.dropbot_remote.hv_output_selected = False
+
+                self.autopump = True
+            else:
+                self.autopump = False
+        except Exception:
+            pass
 
     def on_app_options_changed(self, plugin_name):
         """
