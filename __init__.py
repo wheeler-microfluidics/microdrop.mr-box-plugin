@@ -609,6 +609,23 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                     app.protocol.current_step_number)
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
+                        services_by_name = {service_i.name: service_i
+                                            for service_i in
+                                            PluginGlobals
+                                            .env('microdrop.managed').services}
+
+                        data.name = filename.namebase
+
+                        if 'step_label_plugin' in services_by_name:
+                            # Step label is set for current step.  Set name of
+                            # data series based on step label.
+                            step_label_plugin = (services_by_name
+                                                 .get('step_label_plugin'))
+                            step_label = (step_label_plugin.get_step_options()
+                                          or {}).get('label')
+                            if step_label is not None:
+                                data.name = step_label
+
                         with log_dir.joinpath(filename).open('a') as output:
                             # Write JSON data with `split` orientation, which
                             # preserves the name of the Pandas series.
