@@ -438,8 +438,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         Apply the specified step options.
 
         .. versionchanged:: 0.18.2
-
             Fix typos in automatic pump handling.
+
+        .. versionchanged:: 0.19
+            Write JSON PMT data with ``split`` orientation, which preserves the
+            name of the Pandas series.
 
         Parameters
         ----------
@@ -598,7 +601,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         # delimited JSON][1] file for step.
                         #
                         # Each line of results can be loaded using
-                        # `pandas.read_json(...)`.
+                        # `pandas.read_json(..., orient='split')`.
                         #
                         # [1]: http://ndjson.org/
                         app = get_app()
@@ -607,7 +610,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
                         with log_dir.joinpath(filename).open('a') as output:
-                            data.to_json(output)
+                            # Write JSON data with `split` orientation, which
+                            # preserves the name of the Pandas series.
+                            data.to_json(output, orient='split')
                             output.write('\n')
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
