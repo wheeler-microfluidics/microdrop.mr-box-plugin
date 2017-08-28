@@ -179,6 +179,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         Apply the specified step options.
 
+        .. versionchanged:: 0.18.2
+
+            Fix typos in automatic pump handling.
+
         Parameters
         ----------
         step_options : dict
