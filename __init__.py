@@ -26,12 +26,13 @@ import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 
-
-logger = logging.getLogger(__name__)
-
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
+
+
+logger = logging.getLogger(__name__)
+
 
 # Add plugin to `"microdrop.managed"` plugin namespace.
 PluginGlobals.push_env('microdrop.managed')
@@ -62,31 +63,35 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                            ValueAtMost(maximum=1)]))
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
-                         #PMT Fields
+                         # PMT Fields
                          Boolean.named('Measure_PMT')
                          .using(default=False, optional=True),
-                         # Only allow PMT Duration to be set if `Measure_PMT` field
-                         # is set to `True`.
+                         # Only allow PMT Duration to be set if `Measure_PMT`
+                         # field is set to `True`.
                          Integer.named('Measurement_duration_(s)')
                          .using(default=10, optional=True,
-                                validators= [ValueAtLeast(minimum=0)],
+                                validators=[ValueAtLeast(minimum=0)],
                                 properties={'mappers':
-                                            [PropertyMapper('sensitive',
-                                                            attr='Measure_PMT'),
-                                             PropertyMapper('editable',
-                                                            attr='Measure_PMT')]}),
+                                            [PropertyMapper
+                                             ('sensitive', attr='Measure_PMT'),
+                                             PropertyMapper
+                                             ('editable',
+                                              attr='Measure_PMT')]}),
                          # Only allow ADC Gain to be set if `Measure_PMT` field
                          # is set to `True`.
-                         #TODO Convert ADC Gain to dropdown list  with valid_values = (1,2,4,8,16)
+                         # TODO Convert ADC Gain to dropdown list with
+                         # valid_values = (1,2,4,8,16)
                          Integer.named('ADC_Gain')
                          .using(default=1, optional=True,
-                                validators= [ValueAtLeast(minimum=1), ValueAtMost(maximum=16)],
+                                validators=[ValueAtLeast(minimum=1),
+                                            ValueAtMost(maximum=16)],
                                 properties={'mappers':
-                                            [PropertyMapper('sensitive',
-                                                            attr='Measure_PMT'),
-                                             PropertyMapper('editable',
-                                                            attr='Measure_PMT')]}),
-                         #Pump Fields
+                                            [PropertyMapper
+                                             ('sensitive', attr='Measure_PMT'),
+                                             PropertyMapper
+                                             ('editable',
+                                              attr='Measure_PMT')]}),
+                         # Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
                          # Only allow pump frequency to be set if `Pump` field
@@ -154,13 +159,13 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         self.board.pump_deactivate()
         # Set pump frequency to zero.
         self.board.pump_frequency_set(0)
-        #Set the pmt shutter pin to output
+        # Set the pmt shutter pin to output
         self.board.pin_mode(9, 1)
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
         # Set PMT control voltage to zero.
         self.board.pmt_set_pot(0)
-        #Start the ADC and Perform ADC Calibration
+        # Start the ADC and Perform ADC Calibration
         MAX11210_begin(self.board)
         MAX11210_status(self.board)
 
@@ -196,9 +201,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 else:
                     # Send board request to move magnet to down position (if
                     # it is already engaged, this function does nothing).
-                    #Move to low position and then home
-                    #used to save time and avoid magnet going beyong the endstop
-                    #and loosing steps
+                    # Move to low position and then home
+                    # used to save time and avoid magnet going beyong the
+                    # endstop and loosing steps
                     if not self.board.zstage.is_down:
                         self.board.zstage.move_to(1)
                         self.board.zstage.home()
@@ -206,16 +211,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 # Pump
                 # ----
                 if step_options.get('Pump'):
-                    if self.autopump == False:
+                    if self.autopump is False:
                         # Launch pump control dialog.
                         frequency_hz = step_options.get('Pump_frequency_(hz)')
                         duration_s = step_options.get('Pump_duration_(s)')
 
                         # Disable pump dialog
                         #
-                        # Still not sure what the best interface is for the pump,
-                        # but for now we will use a simple time/frequency step
-                        # option.
+                        # XXX Still not sure what the best interface is for the
+                        # pump, but for now we will use a simple time/frequency
+                        # step option.
                         use_pump_dialog = False
                         if use_pump_dialog:
                             self.pump_control_dialog(frequency_hz, duration_s)
@@ -225,25 +230,29 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             time.sleep(duration_s)
                             self.board.pump_deactivate()
                     else:
-                        #Routine if auto pump is enabled
+                        # Routine if auto pump is enabled
                         self.board.pump_frequency_set(8000)
+                        state = np.zeros(self.dropbot_remote
+                                         .number_of_channels)
                         state[24] = 1
                         self.dropbot_remote.state_of_channels = state
                         cap = 0
-                        map_cp = round(self.max_capacitance,12)
+                        max_cp = round(self.max_capacitance, 12)
                         start_time = time.time()
                         end_time = start_time
                         pump_time = end_time - start_time
                         while ((cap < max_cp) and (pump_time < 5)):
                             self.board.pump_activate()
                             x = []
-                            for i in range(0,10):
-                                x.append(self.dropbot_remote.measure_capacitance())
+                            for i in range(0, 10):
+                                x.append(self.dropbot_remote
+                                         .measure_capacitance())
                             self.board.pump_deactivate()
                             cap = sum(x) / len(x)
                             end_time = time.time()
                             pump_time = end_time - start_time
-                        logger.info('Capacitance of filled reservoir: %s'%cap)
+                        logger.info('Capacitance of filled reservoir: %s' %
+                                    cap)
 
                 # PMT/ADC
                 # -------
@@ -252,22 +261,25 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     self.board.led1.on = False
                     self.board.led2.on = False
 
-                    #Start the ADC and Perform ADC Calibration
+                    # Start the ADC and Perform ADC Calibration
                     MAX11210_begin(self.board)
                     ''' Set PMT control voltage via digipot.'''
-                    #Divide the control voltage by the maximum 1100 mV and convert it to digipot steps
-                    pmt_digipot = int((self.board.config.pmt_control_voltage/1100.)*255)
+                    # Divide the control voltage by the maximum 1100 mV and
+                    # convert it to digipot steps
+                    pmt_digipot = int((self.board.config.pmt_control_voltage /
+                                       1100.) * 255)
                     self.board.pmt_set_pot(pmt_digipot)
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
-                    #Set the digital gain of ADC
+
+                    # Set the digital gain of ADC
                     def auto_gain(adc_dgain):
-                        logger.info('Trying ADC Digital Gain: %s ' %adc_dgain)
+                        logger.info('Trying ADC Digital Gain: %s ' % adc_dgain)
                         self.board.pmt_open_shutter()
                         try:
                             self.board.MAX11210_setGain(adc_dgain)
                             reads = 0
-                            for i in range(0,10):
+                            for i in range(0, 10):
                                 self.board.MAX11210_setRate(120)
                                 reading_i = self.board.MAX11210_getData()
                                 reads += reading_i
@@ -293,12 +305,12 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                 adc_dgain /= 2
                         else:
                             break
-                    logger.info('ADC Digital Gain set to: %s ' %adc_dgain)
+                    logger.info('ADC Digital Gain set to: %s ' % adc_dgain)
 
                     # Get ADC Digital Gain from step options
                     # adc_dgain = step_options.get('ADC_Gain')
 
-                    #Set sampling reset_board_state
+                    # Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
                     # Construct a function compatible with `measure_dialog` to
                     # read from MAX11210 ADC.
@@ -310,9 +322,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
-                    duration_s = step_options.get('Measurement_duration_(s)')+1
+                    duration_s = (step_options.get('Measurement_duration_(s)')
+                                  + 1)
                     app_values = self.get_app_values()
-                    use_si_prefixes = app_values.get('Use PMT y-axis SI prefixes')
+                    use_si_prefixes = app_values.get('Use PMT y-axis SI '
+                                                     'prefixes')
                     data = (mrbox.ui.gtk.measure_dialog
                             .measure_dialog(data_func, duration_s=duration_s,
                                             auto_start=True, auto_close=False,
@@ -348,8 +362,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             self._user_warned = True
 
     def pump_control_dialog(self, frequency_hz, duration_s):
-        # `PumpControl` class uses threads.  Need to initialize GTK to use threads.
-        # See [here][1] for more information.
+        # `PumpControl` class uses threads.  Need to initialize GTK to use
+        # threads. See [here][1] for more information.
         #
         # [1]: http://faq.pygtk.org/index.py?req=show&file=faq20.001.htp
         gtk.gdk.threads_init()
@@ -363,7 +377,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         # Create dialog window to wrap pump control view widget.
         dialog = gtk.Dialog()
-        dialog.get_content_area().pack_start(pump_control_view.widget, True, True)
+        dialog.get_content_area().pack_start(pump_control_view.widget, True,
+                                             True)
         dialog.set_position(gtk.WIN_POS_MOUSE)
         dialog.show_all()
         dialog.run()
@@ -403,8 +418,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 #
                 # [1]: https://github.com/wheeler-microfluidics/base-node-rpc/
                 #              issues/8
-                if (host_software_version.major != remote_software_version.major or
-                    host_software_version.minor != remote_software_version.minor):
+                if any([host_software_version.major !=
+                        remote_software_version.major,
+                        host_software_version.minor !=
+                        remote_software_version.minor]):
                     response = yesno("The MR-box peripheral board firmware "
                                      "version (%s) does not match the driver "
                                      "version (%s). Update firmware?" %
@@ -414,8 +431,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         self.on_flash_firmware()
 
                 # Serial connection to peripheral **successfully established**.
-                logger.info('Serial connection to peripheral board **successfully'
-                            ' established** on port `%s`', self.board.port)
+                logger.info('Serial connection to peripheral board '
+                            '**successfully established** on port `%s`',
+                            self.board.port)
                 logger.info('Peripheral board properties:\n%s',
                             self.board.properties)
                 logger.info('Reset board state to defaults.')
@@ -462,7 +480,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         """
         # TODO: this should be re-enabled once we can get the
         # mr-box-peripheral-board to connect **after** the Dropbot.
-        #if function_name in ['on_plugin_enable']:
+        # if function_name in ['on_plugin_enable']:
         #    return [ScheduleRequest('dropbot_plugin', self.name)]
         return []
 
@@ -567,26 +585,27 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         if self.board:
             self.reset_board_state()
 
-        #Initialize auto pump
+        # Initialize auto pump
         try:
             response = yesno('Enable Auto Pump?')
             if (response == gtk.RESPONSE_YES):
-                #Connect Dropbot to receive capacitance measurements
+                # Connect Dropbot to receive capacitance measurements
                 self.initialize_connection_with_dropbot()
-                #Turn on Channel 24 (Pump reservoir)
+                # Turn on Channel 24 (Pump reservoir)
                 self.dropbot_remote.hv_output_enabled = True
                 self.dropbot_remote.hv_output_selected = True
                 self.dropbot_remote.voltage = 100
                 state = np.zeros(self.dropbot_remote.number_of_channels)
-                state[24]  = 1
+                state[24] = 1
                 self.dropbot_remote.state_of_channels = state
                 logger.warning('Please load the reservoir with 7.5 uL WB')
                 self.max_capacitance = 0
                 mc = []
-                for i in range(0,100):
+                for i in range(0, 100):
                     mc.append(self.dropbot_remote.measure_capacitance())
                 self.max_capacitance = sum(mc) / len(mc)
-                logger.info('Capacitance of reservoir: %s'%self.max_capacitance)
+                logger.info('Capacitance of reservoir: %s' %
+                            self.max_capacitance)
                 state[24] = 0
                 self.dropbot_remote.state_of_channels = state
 
@@ -610,7 +629,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         plugin : str
             Plugin name for which the app options changed
         """
-        app = get_app()
         if plugin_name == self.name and self.board:
             self.update_leds()
 
@@ -670,7 +688,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         except Exception:
             logger.debug('[%s] Failed to get environment data.', __name__,
-                          exc_info=True)
+                         exc_info=True)
 
         emit_signal('on_step_complete', [self.name])
 
@@ -691,5 +709,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             # Apply step options.
             options = self.get_step_options()
             self.apply_step_options(options)
+
 
 PluginGlobals.pop_env()
