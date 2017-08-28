@@ -227,10 +227,12 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     else:
                         #Routine if auto pump is enabled
                         self.board.pump_frequency_set(8000)
+                        state = np.zeros(self.dropbot_remote
+                                         .number_of_channels)
                         state[24] = 1
                         self.dropbot_remote.state_of_channels = state
                         cap = 0
-                        map_cp = round(self.max_capacitance,12)
+                        max_cp = round(self.max_capacitance, 12)
                         start_time = time.time()
                         end_time = start_time
                         pump_time = end_time - start_time
