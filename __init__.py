@@ -631,6 +631,28 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             # preserves the name of the Pandas series.
                             data.to_json(output, orient='split')
                             output.write('\n')
+
+                        # Update Excel file with latest PMT results.
+                        output_path = ph.path('PMT_readings.xlsx')
+                        data_files = log_dir.files('PMT_readings-*.ndjson')
+
+                        def _threadsafe_write_results():
+                            while True:
+                                try:
+                                    _write_results(TEMPLATE_PATH, output_path,
+                                                   data_files)
+                                    break
+                                except IOError:
+                                    response = yesno('Error writing PMT '
+                                                     'summary to Excel '
+                                                     'spreadsheet output path:'
+                                                     '`%s`.\n\nTry again?')
+                                    if response == gtk.RESPONSE_NO:
+                                        break
+                        # Schedule writing of results to occur in main GTK
+                        # thread in case confirmation dialog needs to be
+                        # displayed.
+                        gobject.idle_add(_threadsafe_write_results)
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
