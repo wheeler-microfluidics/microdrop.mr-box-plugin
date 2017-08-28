@@ -632,27 +632,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             data.to_json(output, orient='split')
                             output.write('\n')
 
-                        # Update Excel file with latest PMT results.
-                        output_path = ph.path('PMT_readings.xlsx')
-                        data_files = log_dir.files('PMT_readings-*.ndjson')
-
-                        def _threadsafe_write_results():
-                            while True:
-                                try:
-                                    _write_results(TEMPLATE_PATH, output_path,
-                                                   data_files)
-                                    break
-                                except IOError:
-                                    response = yesno('Error writing PMT '
-                                                     'summary to Excel '
-                                                     'spreadsheet output path:'
-                                                     '`%s`.\n\nTry again?')
-                                    if response == gtk.RESPONSE_NO:
-                                        break
-                        # Schedule writing of results to occur in main GTK
-                        # thread in case confirmation dialog needs to be
-                        # displayed.
-                        gobject.idle_add(_threadsafe_write_results)
+                        self.update_excel_results()
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
@@ -666,6 +646,50 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                            'not connected.', __name__, exc_info=True)
             # Do not warn user again until after the next connection attempt.
             self._user_warned = True
+
+    def update_excel_results(self, launch=False):
+        '''
+        Update output Excel results file.
+
+        .. versionadded:: 0.19
+
+        Parameters
+        ----------
+        launch : bool, optional
+            If ``True``, launch Excel spreadsheet after writing.
+        '''
+        app = get_app()
+        log_dir = app.experiment_log.get_log_path()
+
+        # Update Excel file with latest PMT results.
+        output_path = log_dir.joinpath('PMT_readings.xlsx')
+        data_files = list(log_dir.files('PMT_readings-*.ndjson'))
+
+        if not data_files:
+            logger.debug('No PMT readings files found.')
+            return
+
+        def _threadsafe_write_results():
+            while True:
+                try:
+                    _write_results(TEMPLATE_PATH, output_path, data_files)
+                    if launch:
+                        try:
+                            output_path.launch()
+                        except Exception:
+                            pass
+                    break
+                except IOError:
+                    response = yesno('Error writing PMT summary to Excel '
+                                     'spreadsheet output path: `%s`.\n\nTry '
+                                     'again?')
+                    if response == gtk.RESPONSE_NO:
+                        break
+
+        # Schedule writing of results to occur in main GTK
+        # thread in case confirmation dialog needs to be
+        # displayed.
+        gobject.idle_add(_threadsafe_write_results)
 
     def pump_control_dialog(self, frequency_hz, duration_s):
         # `PumpControl` class uses threads.  Need to initialize GTK to use
@@ -882,6 +906,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
+
+    def on_protocol_finished(self):
+        # Protocol has finished.  Update
+        self.update_excel_results()
 
     def on_experiment_log_changed(self, experiment_log):
         '''
