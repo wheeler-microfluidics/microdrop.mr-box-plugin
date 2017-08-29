@@ -6,7 +6,6 @@ import time
 import serial
 import warnings
 
-import numpy as np
 from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
@@ -27,6 +26,7 @@ import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
 import openpyxl_helpers as oxh
 import openpyxl_helpers as ox
+import numpy as np
 import pandas as pd
 import path_helpers as ph
 
