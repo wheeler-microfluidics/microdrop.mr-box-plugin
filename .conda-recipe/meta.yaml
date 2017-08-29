@@ -29,6 +29,7 @@ requirements:
     - pip-helpers
     - pyyaml
     - wheeler.pygtkhelpers
+    - openpyxl-helpers
 
   run:
     - conda-helpers >=0.4
@@ -41,6 +42,7 @@ requirements:
     - pip-helpers
     - pyyaml
     - wheeler.pygtkhelpers
+    - openpyxl-helpers
 
 test:
   commands:
