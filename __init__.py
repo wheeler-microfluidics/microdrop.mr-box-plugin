@@ -24,8 +24,8 @@ import gtk
 import microdrop_utility as utility
 import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
+import openpyxl as ox
 import openpyxl_helpers as oxh
-import openpyxl_helpers as ox
 import numpy as np
 import pandas as pd
 import path_helpers as ph
