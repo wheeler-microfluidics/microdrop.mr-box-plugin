@@ -537,47 +537,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
 
-                    # Set the digital gain of ADC
-                    def auto_gain(adc_dgain):
-                        logger.info('Trying ADC Digital Gain: %s ' % adc_dgain)
-                        self.board.pmt_open_shutter()
-                        reads = 0
-                        try:
-                            self.board.MAX11210_setGain(adc_dgain)
-                            for i in range(0, 10):
-                                self.board.MAX11210_setRate(120)
-                                reading_i = self.board.MAX11210_getData()
-                                reads += reading_i
-                        except Exception:
-                            logger.info('Failed to receive data from the PMT')
-                            pass
-                        finally:
-                            self.board.pmt_close_shutter()
-                        reads /= 10.0
-                        return reads
-
-                    adc_threshold = 2 ** 24 - 2**20
-                    adc_dgain = 16
-
-                    while True:
-                        # Check if we are saturating the ADC at this gain level
-                        if (auto_gain(adc_dgain) > adc_threshold):
-                            if adc_dgain == 1:
-                                # If we are still saturating at adc_dgain==1,
-                                # we are over range
-                                if (auto_gain(adc_dgain) >= (2 ** 24 - 1)):
-                                    logger.warning('PMT Overange!')
-                                break
-                            else:
-                                # Reduce the gain by half
-                                adc_dgain /= 2
-                        else:
-                            break
-                    logger.info('ADC Digital Gain set to: %s ' % adc_dgain)
-
-                    # Get ADC Digital Gain from step options
-                    # adc_dgain = step_options.get('ADC_Gain')
-
                     # Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
                     # Construct a function compatible with `measure_dialog` to
@@ -585,7 +544,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_dgain=adc_dgain,
                                                         adc_rate=adc_rate))
 
                     # Use constructed function to launch measurement dialog for
