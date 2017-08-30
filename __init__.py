@@ -318,7 +318,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         Float.named('LED 2 brightness')
                         .using(default=0, optional=True,
                                validators=[ValueAtLeast(minimum=0),
-                                           ValueAtMost(maximum=1)]))
+                                           ValueAtMost(maximum=1)]),
+                        Boolean.named('Use auto pump').using(
+                            default=False, optional=True))
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
                          # PMT Fields
@@ -476,25 +478,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 # Pump
                 # ----
                 if step_options.get('Pump'):
-                    if self.autopump is False:
-                        # Launch pump control dialog.
-                        frequency_hz = step_options.get('Pump_frequency_(hz)')
-                        duration_s = step_options.get('Pump_duration_(s)')
-
-                        # Disable pump dialog
-                        #
-                        # XXX Still not sure what the best interface is for the
-                        # pump, but for now we will use a simple time/frequency
-                        # step option.
-                        use_pump_dialog = False
-                        if use_pump_dialog:
-                            self.pump_control_dialog(frequency_hz, duration_s)
-                        else:
-                            self.board.pump_frequency_set(frequency_hz)
-                            self.board.pump_activate()
-                            time.sleep(duration_s)
-                            self.board.pump_deactivate()
-                    else:
+                    if app_values.get('Use auto pump'):
                         # Routine if auto pump is enabled
                         self.board.pump_frequency_set(8000)
                         state = np.zeros(self.dropbot_remote
@@ -518,6 +502,25 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             pump_time = end_time - start_time
                         logger.info('Capacitance of filled reservoir: %s' %
                                     cap)
+                    else:
+                        # Launch pump control dialog.
+                        frequency_hz = step_options.get('Pump_frequency_(hz)')
+                        duration_s = step_options.get('Pump_duration_(s)')
+
+                        # Disable pump dialog
+                        #
+                        # XXX Still not sure what the best interface is for the
+                        # pump, but for now we will use a simple time/frequency
+                        # step option.
+                        use_pump_dialog = False
+                        if use_pump_dialog:
+                            self.pump_control_dialog(frequency_hz, duration_s)
+                        else:
+                            self.board.pump_frequency_set(frequency_hz)
+                            self.board.pump_activate()
+                            time.sleep(duration_s)
+                            self.board.pump_deactivate()
+                    else:
 
                 # PMT/ADC
                 # -------
@@ -882,8 +885,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         # Initialize auto pump
         try:
-            response = yesno('Enable Auto Pump?')
-            if (response == gtk.RESPONSE_YES):
+            if app_values.get('Use auto pump'):
                 # Connect Dropbot to receive capacitance measurements
                 self.initialize_connection_with_dropbot()
                 # Turn on Channel 24 (Pump reservoir)
@@ -906,10 +908,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
                 self.dropbot_remote.hv_output_enabled = False
                 self.dropbot_remote.hv_output_selected = False
-
-                self.autopump = True
-            else:
-                self.autopump = False
         except Exception:
             pass
 
