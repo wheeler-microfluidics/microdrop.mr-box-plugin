@@ -548,6 +548,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                 self.board.MAX11210_setRate(120)
                                 reading_i = self.board.MAX11210_getData()
                                 reads += reading_i
+                        except Exception:
+                            logger.info('Failed to receive data from the PMT')
+                            pass
                         finally:
                             self.board.pmt_close_shutter()
                         reads /= 10.0
