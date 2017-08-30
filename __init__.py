@@ -339,16 +339,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                          # is set to `True`.
                          # TODO Convert ADC Gain to dropdown list with
                          # valid_values = (1,2,4,8,16)
-                         Integer.named('ADC_Gain')
-                         .using(default=1, optional=True,
-                                validators=[ValueAtLeast(minimum=1),
-                                            ValueAtMost(maximum=16)],
-                                properties={'mappers':
-                                            [PropertyMapper
-                                             ('sensitive', attr='Measure_PMT'),
-                                             PropertyMapper
-                                             ('editable',
-                                              attr='Measure_PMT')]}),
+                        #  Integer.named('ADC_Gain')
+                        #  .using(default=1, optional=True,
+                        #         validators=[ValueAtLeast(minimum=1),
+                        #                     ValueAtMost(maximum=16)],
+                        #         properties={'mappers':
+                        #                     [PropertyMapper
+                        #                      ('sensitive', attr='Measure_PMT'),
+                        #                      PropertyMapper
+                        #                      ('editable',
+                        #                       attr='Measure_PMT')]}),
                          # Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
