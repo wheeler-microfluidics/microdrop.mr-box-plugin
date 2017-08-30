@@ -1,30 +1,34 @@
+from collections import OrderedDict
+import contextlib
 import datetime as dt
 import logging
 import time
 import serial
+import warnings
 
-import numpy as np
 from flatland import Boolean, Float, Form, Integer
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import AppDataController, StepOptionsController
-from pygtkhelpers.ui.objectlist import PropertyMapper
-from pygtkhelpers.utils import dict_to_form
-from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
-
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
-import gobject
-import gtk
-import path_helpers as ph
-import microdrop_utility as utility
-
 from mr_box_peripheral_board.max11210_adc_ui import (MAX11210_begin,
                                                      MAX11210_status)
+from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
+from pygtkhelpers.ui.objectlist import PropertyMapper
+from pygtkhelpers.utils import dict_to_form
+from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
+import gobject
+import gtk
+import microdrop_utility as utility
 import mr_box_peripheral_board as mrbox
 import mr_box_peripheral_board.ui.gtk.measure_dialog
-from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
+import openpyxl as ox
+import openpyxl_helpers as oxh
+import numpy as np
+import pandas as pd
+import path_helpers as ph
 
 from ._version import get_versions
 __version__ = get_versions()['version']
@@ -36,6 +40,260 @@ logger = logging.getLogger(__name__)
 
 # Add plugin to `"microdrop.managed"` plugin namespace.
 PluginGlobals.push_env('microdrop.managed')
+
+
+# Path to DRC data collection template Excel spreadsheet workbook.
+TEMPLATE_PATH = (ph.path(r'templates')
+                 .joinpath('DRC Data Collection-named_ranges.xlsx'))
+
+
+def _write_results(template_path, output_path, data_files):
+    '''
+    Write results as Excel spreadsheet to output path based on template.
+
+    .. versionadded:: 0.19
+
+    Parameters
+    ----------
+    template_path : str
+        Path to Excel template spreadsheet.
+    output_path : str
+        Path to write output Excel spreadsheet to.
+    data_files : list
+        List of paths to `new-line delimited JSON files <http://ndjson.org/`_
+        containing measured PMT data.
+
+        Each new-line delimited JSON file corresponds to protocol step, and
+        each line in each file corresponds to measured PMT data from a single
+        measurement run.
+
+    Returns
+    -------
+    path_helpers.path
+        Wrapped output path.
+
+        Allows, for example, easy opening of document using the ``launch()``
+        method.
+    '''
+    output_path = ph.path(output_path)
+
+    # XXX `openpyxl` does not currently [support reading existing data
+    # validation][1].
+    #
+    # As a workaround, load the extension lists and data validation definitions
+    # from the template workbook so they may be restored to the output workbook
+    # after modifying with `openpyxl`.
+    #
+    # [1]: http://openpyxl.readthedocs.io/en/default/validation.html#validating-cells
+    extension_lists = oxh.load_extension_lists(template_path)
+    data_validations = oxh.load_data_validations(template_path)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'Data Validation extension is not '
+                                'supported and will be removed', UserWarning)
+
+        # Open template workbook to modify it in-memory before writing to the
+        # output file.
+        with contextlib.closing(ox.load_workbook(template_path)) as workbook:
+            # Create pandas Excel writer to make it easier to append data
+            # frames as worksheets.
+            with pd.ExcelWriter(output_path,
+                                engine='openpyxl') as output_writer:
+                # Configure pandas Excel writer to append to template workbook
+                # contents.
+                output_writer.book = workbook
+
+                # Get mapping from each worksheet name to the correpsonding
+                # worksheet object.
+                worksheets_by_name = OrderedDict(zip(workbook.sheetnames,
+                                                     workbook.worksheets))
+
+                # Get list of defined names, grouped by worksheet name.
+                defined_names_by_worksheet = \
+                    oxh.get_defined_names_by_worksheet(workbook)
+
+                # Select the "Location" entry cell by default.
+                workbook.active = 0
+                worksheet = worksheets_by_name['Assay Info']
+                default_cell = \
+                    worksheet[defined_names_by_worksheet['Assay Info']
+                              ['LocationEntry']]
+                for attribute_i in ('activeCell', 'sqref'):
+                    setattr(worksheet.views.sheetView[0].selection[0],
+                            attribute_i, default_cell.coordinate)
+
+                # Set the "Date" entry cell value to the current date.
+                date_cell = \
+                    worksheet[defined_names_by_worksheet['Assay Info']
+                              ['DateEntry']]
+                date_cell.value = dt.datetime.utcnow().date()
+
+                # Look up the location of the top cell in the measurement IDs
+                # column of the PMT results information table.
+                pmt_ids_range = (defined_names_by_worksheet['Assay Info']
+                                 ['PMTMeasurementIDEntries'])
+                pmt_ids_boundaries = ox.utils.range_boundaries(pmt_ids_range)
+                pmt_ids_column = pmt_ids_boundaries[0]
+
+                # Look up the location of the top cell in the PMT mean
+                # measurements column of the results information table.
+                pmt_mean_range = (defined_names_by_worksheet['Assay Info']
+                                  ['PMTMeanEntries'])
+                pmt_mean_boundaries = ox.utils.range_boundaries(pmt_mean_range)
+                pmt_mean_column = pmt_mean_boundaries[0]
+
+                # Set output row index to the first row of the PMT results
+                # table.
+                pmt_results_row = pmt_ids_boundaries[1]
+
+                # Write the data from each PMT measurement run to a separate:
+                #  1. **worksheet**; and
+                #  2. **row** in the PMT results information table in the
+                #     `Assay Info` worksheet.
+                for data_file_i in data_files:
+                    # Each line in each [new-line delimited JSON file][1]
+                    # corresponds to measured PMT data from a single
+                    # measurement run.
+                    #
+                    # [1]: http://ndjson.org/
+                    for j, data_json_ij in enumerate(data_file_i.lines()):
+                        try:
+                            # Try reading JSON data with `split` orientation,
+                            # which preserves the name of the Pandas series.
+                            s_data_ij = pd.read_json(data_json_ij,
+                                                     typ='series',
+                                                     orient='split')
+                        except ValueError:
+                            logging.debug('Decode legacy series')
+                            # JSON data was not encoded in `split` orientation.
+                            s_data_ij = pd.read_json(data_json_ij,
+                                                     typ='series')
+
+                        if not s_data_ij.name:
+                            # No name was encoded in the JSON data.  Interpret
+                            # data series name from filename.
+                            s_data_ij.name = '%s-%02d' % (data_file_i.namebase
+                                                          .split('-')[-1], j)
+
+                        # Add column indicating time of each sample relative to
+                        # time of first sample point for easier comparison
+                        # between worksheets.
+                        relative_time_s_i = (pd.Series(s_data_ij.index -
+                                                       s_data_ij.index[0])
+                                             .dt.total_seconds())
+                        df_data_ij = s_data_ij.to_frame()
+                        df_data_ij.insert(0, 'relative_time_s',
+                                          relative_time_s_i.values)
+
+                        # Write measurement data to worksheet.
+                        df_data_ij.to_excel(output_writer,
+                                            sheet_name=s_data_ij.name,
+                                            header=True)
+
+                        # Write name of measurement run to the PMT results
+                        # information table in the `Assay Info` worksheet.
+                        id_cell_ij = worksheet.cell(row=pmt_results_row,
+                                                    column=pmt_ids_column)
+                        id_cell_ij.value = s_data_ij.name
+
+                        # Write formula for the average measurement value to
+                        # the PMT results information table in the `Assay Info`
+                        # worksheet.
+                        mean_cell_ij = worksheet.cell(row=pmt_results_row,
+                                                      column=pmt_mean_column)
+
+                        sheetname_ij = ox.utils.quote_sheetname(s_data_ij.name)
+                        mean_formula_ij = ('=AVERAGE({sheetname}!C2, '
+                                           '{sheetname}!C{end_row})'
+                                           .format(sheetname=sheetname_ij,
+                                                   end_row=2 + len(s_data_ij)))
+                        mean_cell_ij.value = mean_formula_ij
+
+                        # Set output row index to the next row of the PMT
+                        # results table.
+                        pmt_results_row += 1
+
+                # Create mapping of the name of each worksheet containing PMT
+                # measurement data to the corresponding worksheet.
+                chart_worksheets_by_name = OrderedDict(zip(workbook
+                                                           .sheetnames[2:],
+                                                           workbook
+                                                           .worksheets[2:]))
+
+                # Generate list of colors to use for plotting PMT measurements.
+                # Randomize order (deterministically due to static seed) since
+                # default order is alphabetic.
+                random_state = np.random.RandomState(1)
+                colors = ox.drawing.colors.PRESET_COLORS[:]
+                random_state.shuffle(colors)
+
+                # Create global chart for plotting all measurements to the
+                # `Assay Info` worksheet.
+                chart = ox.chart.ScatterChart()
+                chart.x_axis.title = 'Time (s)'
+                chart.y_axis.title = 'Current (A)'
+
+                for i, (name_i,
+                        worksheet_i) in enumerate(chart_worksheets_by_name
+                                                  .iteritems()):
+                    # Create chart for current PMT measurements worksheet.
+                    chart_i = ox.chart.ScatterChart()
+                    chart_i.x_axis.title = chart.x_axis.title
+                    chart_i.y_axis.title = chart.y_axis.title
+
+                    # Find bottom row index in current worksheet.
+                    max_row_i = max([cell_i.row for cell_i in
+                                     worksheet.get_cell_collection()])
+
+                    # Select color for current worksheet.
+                    color_i = ox.drawing.colors.ColorChoice(prstClr=colors
+                                                            [i % len(colors)])
+
+                    # Create data series referring to PMT data from current
+                    # worksheet.
+                    xvalues_i = ox.chart.Reference(worksheet_i, min_col=2,
+                                                   min_row=2,
+                                                   max_row=max_row_i)
+                    yvalues_i = ox.chart.Reference(worksheet_i, min_col=3,
+                                                   min_row=1,
+                                                   max_row=max_row_i)
+                    series_i = ox.chart.Series(yvalues_i, xvalues_i,
+                                               title_from_data=True)
+                    # Set line color for measurements from current worksheet.
+                    line_prop_i = \
+                        ox.drawing.line.LineProperties(solidFill=color_i)
+                    series_i.graphicalProperties.line = line_prop_i
+                    chart_i.title = 'PMT current'
+                    chart_i.height = 10  # default is 7.5
+                    chart_i.width = 20  # default is 15
+
+                    # Add chart to current worksheet.
+                    chart_i.series.append(series_i)
+
+                    worksheet_i.add_chart(chart_i, 'D1')
+
+                    # Add PMT data series from current worksheet to common
+                    # chart in `Assay Info` worksheet.
+                    chart.series.append(series_i)
+
+                # Add common chart containing data from all PMT worksheets to
+                # `Assay Info` worksheet.
+                chart.title = 'PMT current'
+                chart.height = 20  # default is 7.5
+                chart.width = 25  # default is 15
+
+                worksheet.add_chart(chart, 'I1')
+
+    # Restore the extension lists and data validation definitions to the output
+    # workbook (they were removed by `openpyxl`, see above).
+    updated_xlsx = oxh.update_extension_lists(output_path, extension_lists)
+    with output_path.open('wb') as output:
+        output.write(updated_xlsx)
+    updated_xlsx = oxh.update_data_validations(output_path, data_validations)
+    with output_path.open('wb') as output:
+        output.write(updated_xlsx)
+
+    return output_path
 
 
 class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
@@ -81,16 +339,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                          # is set to `True`.
                          # TODO Convert ADC Gain to dropdown list with
                          # valid_values = (1,2,4,8,16)
-                         Integer.named('ADC_Gain')
-                         .using(default=1, optional=True,
-                                validators=[ValueAtLeast(minimum=1),
-                                            ValueAtMost(maximum=16)],
-                                properties={'mappers':
-                                            [PropertyMapper
-                                             ('sensitive', attr='Measure_PMT'),
-                                             PropertyMapper
-                                             ('editable',
-                                              attr='Measure_PMT')]}),
+                        #  Integer.named('ADC_Gain')
+                        #  .using(default=1, optional=True,
+                        #         validators=[ValueAtLeast(minimum=1),
+                        #                     ValueAtMost(maximum=16)],
+                        #         properties={'mappers':
+                        #                     [PropertyMapper
+                        #                      ('sensitive', attr='Measure_PMT'),
+                        #                      PropertyMapper
+                        #                      ('editable',
+                        #                       attr='Measure_PMT')]}),
                          # Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
@@ -180,8 +438,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         Apply the specified step options.
 
         .. versionchanged:: 0.18.2
-
             Fix typos in automatic pump handling.
+
+        .. versionchanged:: 0.19
+            Write JSON PMT data with ``split`` orientation, which preserves the
+            name of the Pandas series.
 
         Parameters
         ----------
@@ -276,44 +537,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
 
-                    # Set the digital gain of ADC
-                    def auto_gain(adc_dgain):
-                        logger.info('Trying ADC Digital Gain: %s ' % adc_dgain)
-                        self.board.pmt_open_shutter()
-                        try:
-                            self.board.MAX11210_setGain(adc_dgain)
-                            reads = 0
-                            for i in range(0, 10):
-                                self.board.MAX11210_setRate(120)
-                                reading_i = self.board.MAX11210_getData()
-                                reads += reading_i
-                        finally:
-                            self.board.pmt_close_shutter()
-                        reads /= 10.0
-                        return reads
-
-                    adc_threshold = 2 ** 24 - 2**19
-                    adc_dgain = 16
-
-                    while True:
-                        # Check if we are saturating the ADC at this gain level
-                        if (auto_gain(adc_dgain) > adc_threshold):
-                            if adc_dgain == 1:
-                                # If we are still saturating at adc_dgain==1,
-                                # we are over range
-                                if (auto_gain(adc_dgain) >= (2 ** 24 - 1)):
-                                    logger.warning('PMT Overange!')
-                                break
-                            else:
-                                # Reduce the gain by half
-                                adc_dgain /= 2
-                        else:
-                            break
-                    logger.info('ADC Digital Gain set to: %s ' % adc_dgain)
-
-                    # Get ADC Digital Gain from step options
-                    # adc_dgain = step_options.get('ADC_Gain')
-
                     # Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
                     # Construct a function compatible with `measure_dialog` to
@@ -321,7 +544,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_dgain=adc_dgain,
                                                         adc_rate=adc_rate))
 
                     # Use constructed function to launch measurement dialog for
@@ -340,17 +562,38 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         # delimited JSON][1] file for step.
                         #
                         # Each line of results can be loaded using
-                        # `pandas.read_json(...)`.
+                        # `pandas.read_json(..., orient='split')`.
                         #
                         # [1]: http://ndjson.org/
                         app = get_app()
-                        filename = ('PMT_readings-step%04d.ndjson' %
+                        filename = ph.path('PMT_readings-step%04d.ndjson' %
                                     app.protocol.current_step_number)
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
+                        services_by_name = {service_i.name: service_i
+                                            for service_i in
+                                            PluginGlobals
+                                            .env('microdrop.managed').services}
+
+                        data.name = filename.namebase
+
+                        if 'step_label_plugin' in services_by_name:
+                            # Step label is set for current step.  Set name of
+                            # data series based on step label.
+                            step_label_plugin = (services_by_name
+                                                 .get('step_label_plugin'))
+                            step_label = (step_label_plugin.get_step_options()
+                                          or {}).get('label')
+                            if step_label is not None:
+                                data.name = step_label
+
                         with log_dir.joinpath(filename).open('a') as output:
-                            data.to_json(output)
+                            # Write JSON data with `split` orientation, which
+                            # preserves the name of the Pandas series.
+                            data.to_json(output, orient='split')
                             output.write('\n')
+
+                        self.update_excel_results()
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
@@ -364,6 +607,50 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                            'not connected.', __name__, exc_info=True)
             # Do not warn user again until after the next connection attempt.
             self._user_warned = True
+
+    def update_excel_results(self, launch=False):
+        '''
+        Update output Excel results file.
+
+        .. versionadded:: 0.19
+
+        Parameters
+        ----------
+        launch : bool, optional
+            If ``True``, launch Excel spreadsheet after writing.
+        '''
+        app = get_app()
+        log_dir = app.experiment_log.get_log_path()
+
+        # Update Excel file with latest PMT results.
+        output_path = log_dir.joinpath('PMT_readings.xlsx')
+        data_files = list(log_dir.files('PMT_readings-*.ndjson'))
+
+        if not data_files:
+            logger.debug('No PMT readings files found.')
+            return
+
+        def _threadsafe_write_results():
+            while True:
+                try:
+                    _write_results(TEMPLATE_PATH, output_path, data_files)
+                    if launch:
+                        try:
+                            output_path.launch()
+                        except Exception:
+                            pass
+                    break
+                except IOError:
+                    response = yesno('Error writing PMT summary to Excel '
+                                     'spreadsheet output path: `%s`.\n\nTry '
+                                     'again?')
+                    if response == gtk.RESPONSE_NO:
+                        break
+
+        # Schedule writing of results to occur in main GTK
+        # thread in case confirmation dialog needs to be
+        # displayed.
+        gobject.idle_add(_threadsafe_write_results)
 
     def pump_control_dialog(self, frequency_hz, duration_s):
         # `PumpControl` class uses threads.  Need to initialize GTK to use
@@ -580,6 +867,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         '''
         # Close the PMT shutter.
         self.board.pmt_close_shutter()
+
+    def on_protocol_finished(self):
+        # Protocol has finished.  Update
+        self.update_excel_results(launch=True)
 
     def on_experiment_log_changed(self, experiment_log):
         '''
