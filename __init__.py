@@ -541,9 +541,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     def auto_gain(adc_dgain):
                         logger.info('Trying ADC Digital Gain: %s ' % adc_dgain)
                         self.board.pmt_open_shutter()
+                        reads = 0
                         try:
                             self.board.MAX11210_setGain(adc_dgain)
-                            reads = 0
                             for i in range(0, 10):
                                 self.board.MAX11210_setRate(120)
                                 reading_i = self.board.MAX11210_getData()
@@ -556,7 +556,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         reads /= 10.0
                         return reads
 
-                    adc_threshold = 2 ** 24 - 2**19
+                    adc_threshold = 2 ** 24 - 2**20
                     adc_dgain = 16
 
                     while True:
