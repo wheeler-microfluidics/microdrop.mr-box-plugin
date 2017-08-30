@@ -520,7 +520,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             self.board.pump_activate()
                             time.sleep(duration_s)
                             self.board.pump_deactivate()
-                    else:
 
                 # PMT/ADC
                 # -------
