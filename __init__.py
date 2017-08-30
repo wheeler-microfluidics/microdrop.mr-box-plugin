@@ -605,7 +605,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         #
                         # [1]: http://ndjson.org/
                         app = get_app()
-                        filename = ('PMT_readings-step%04d.ndjson' %
+                        filename = ph.path('PMT_readings-step%04d.ndjson' %
                                     app.protocol.current_step_number)
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
