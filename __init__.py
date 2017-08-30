@@ -870,7 +870,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def on_protocol_finished(self):
         # Protocol has finished.  Update
-        self.update_excel_results()
+        self.update_excel_results(launch=True)
 
     def on_experiment_log_changed(self, experiment_log):
         '''
