@@ -579,8 +579,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         else:
                             self.board.MAX11210_setSelfCalGain(self.adc_gain_calibration)
                             self.board.MAX11210_setSelfCalOffset(self.adc_offset_calibration)
-                    self.board.MAX11210_setSysOffsetCal(pmt_sys_offset_cal)
-                    self.board.MAX11210_setSysGainCal(pmt_sys_gain_cal)
+                    self.board.MAX11210_setSysOffsetCal(self.board.config.pmt_sys_offset_cal)
+                    self.board.MAX11210_setSysGainCal(self.board.config.pmt_sys_gain_cal)
 
                     adc_calibration = self.board.get_adc_calibration().to_dict()
 
