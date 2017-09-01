@@ -394,6 +394,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         # Latch to, e.g., config menus, only once
         self.initialized = False
 
+        self.adc_gain_calibration = None
+        self.adc_offset_calibration = None
+
     def reset_board_state(self):
         '''
         Reset MR-Box peripheral board to default state.
@@ -426,7 +429,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         self.board.pmt_set_pot(0)
         # Start the ADC and Perform ADC Calibration
         MAX11210_begin(self.board)
-        adc_calibration = self.board.get_adc_calibration() 
 
         self.update_leds()
 
@@ -456,7 +458,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         if self.board:
             step_log = {}
-        
+
             # log environmental data
             try:
                 env = self.dropbot_remote.get_environment_state()
@@ -556,20 +558,35 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     self.board.led1.on = False
                     self.board.led2.on = False
 
-                    if step_label = 'Background':
+                    # Start the ADC and Perform ADC Calibration
+                    MAX11210_begin(self.board)
+
+                    if step_label.lower() == 'background':
                         '''
                         Perform certain calibration steps only for the background
                         measurement.
-                        '''
-                        pass
 
-                    # Start the ADC and Perform ADC Calibration
-                    MAX11210_begin(self.board)
+                        Read from the 24bit Registries (SCGC, SCOC)
+                        and store their values for the rest of the
+                        measurements.
+                        '''
+                        self.adc_gain_calibration = self.board.MAX11210_getSelfCalGain()
+                        self.adc_offset_calibration = self.board.MAX11210_getSelfCalOffset()
+                    else:
+                        if not self.adc_gain_calibration:
+                            logger.warning('Missing ADC Calibration Values!'
+                                            'Please perform a Background measurement')
+                        else:
+                            self.board.MAX11210_setSelfCalGain(self.adc_gain_calibration)
+                            self.board.MAX11210_setSelfCalOffset(self.adc_offset_calibration)
+                    self.board.MAX11210_setSysOffsetCal(pmt_sys_offset_cal)
+                    self.board.MAX11210_setSysGainCal(pmt_sys_gain_cal)
+
                     adc_calibration = self.board.get_adc_calibration().to_dict()
 
                     logger.info('ADC calibration:\n%s' % adc_calibration)
                     step_log['ADC calibration'] = adc_calibration
-   
+
                     ''' Set PMT control voltage via digipot.'''
                     # Divide the control voltage by the maximum 1100 mV and
                     # convert it to digipot steps
