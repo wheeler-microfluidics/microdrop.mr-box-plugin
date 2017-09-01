@@ -13,8 +13,7 @@ from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
                                       PluginGlobals)
-from mr_box_peripheral_board.max11210_adc_ui import (MAX11210_begin,
-                                                     MAX11210_status)
+from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from pygtkhelpers.utils import dict_to_form
@@ -427,7 +426,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         self.board.pmt_set_pot(0)
         # Start the ADC and Perform ADC Calibration
         MAX11210_begin(self.board)
-        MAX11210_status(self.board)
+        adc_calibration = self.board.get_adc_calibration() 
 
         self.update_leds()
 
@@ -452,10 +451,39 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             Dictionary containing the MR-Box peripheral board plugin options
             for a protocol step.
         '''
+        app = get_app()
+        app_values = self.get_app_values()
+
         if self.board:
+            step_log = {}
+        
+            # log environmental data
+            try:
+                env = self.dropbot_remote.get_environment_state()
+                step_log['environment'] = env.to_dict()
+                logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
+                            (env['temperature_celsius'],
+                             100 * env['relative_humidity']))
+            except Exception:
+                logger.debug('[%s] Failed to get environment data.', __name__,
+                             exc_info=True)
+
             # Save state of LEDs
             led1_on = self.board.led1.on
             led2_on = self.board.led2.on
+
+            services_by_name = {service_i.name: service_i
+                                for service_i in
+                                PluginGlobals
+                                .env('microdrop.managed').services}
+
+            step_label = None
+            if 'step_label_plugin' in services_by_name:
+                # Step label is set for current step
+                step_label_plugin = (services_by_name
+                                     .get('step_label_plugin'))
+                step_label = (step_label_plugin.get_step_options()
+                              or {}).get('label')
 
             # Apply board hardware options.
             try:
@@ -528,8 +556,20 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     self.board.led1.on = False
                     self.board.led2.on = False
 
+                    if step_label = 'Background':
+                        '''
+                        Perform certain calibration steps only for the background
+                        measurement.
+                        '''
+                        pass
+
                     # Start the ADC and Perform ADC Calibration
                     MAX11210_begin(self.board)
+                    adc_calibration = self.board.get_adc_calibration().to_dict()
+
+                    logger.info('ADC calibration:\n%s' % adc_calibration)
+                    step_log['ADC calibration'] = adc_calibration
+   
                     ''' Set PMT control voltage via digipot.'''
                     # Divide the control voltage by the maximum 1100 mV and
                     # convert it to digipot steps
@@ -552,7 +592,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     # the duration specified by the step options.
                     duration_s = (step_options.get('Measurement_duration_(s)')
                                   + 1)
-                    app_values = self.get_app_values()
                     use_si_prefixes = app_values.get('Use PMT y-axis SI '
                                                      'prefixes')
                     data = (mrbox.ui.gtk.measure_dialog
@@ -567,27 +606,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         # `pandas.read_json(..., orient='split')`.
                         #
                         # [1]: http://ndjson.org/
-                        app = get_app()
                         filename = ph.path('PMT_readings-step%04d.ndjson' %
                                     app.protocol.current_step_number)
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
-                        services_by_name = {service_i.name: service_i
-                                            for service_i in
-                                            PluginGlobals
-                                            .env('microdrop.managed').services}
 
                         data.name = filename.namebase
 
-                        if 'step_label_plugin' in services_by_name:
-                            # Step label is set for current step.  Set name of
-                            # data series based on step label.
-                            step_label_plugin = (services_by_name
-                                                 .get('step_label_plugin'))
-                            step_label = (step_label_plugin.get_step_options()
-                                          or {}).get('label')
-                            if step_label is not None:
-                                data.name = step_label
+                        if step_label:
+                            # Set name of data series based on step label.
+                            data.name = step_label
 
                         with log_dir.joinpath(filename).open('a') as output:
                             # Write JSON data with `split` orientation, which
@@ -595,14 +623,17 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             data.to_json(output, orient='split')
                             output.write('\n')
 
+                        step_log['data'] = data.to_dict()
+
                         self.update_excel_results()
             except Exception:
                 logger.error('[%s] Error applying step options.', __name__,
                              exc_info=True)
-
             finally:
                 self.board.led1.on = led1_on
                 self.board.led2.on = led2_on
+
+                app.experiment_log.add_data(step_log, self.name)
 
         elif not self._user_warned:
             logger.warning('[%s] Cannot apply board settings since board is '
@@ -968,19 +999,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         options = self.get_step_options()
         # Apply step options
         self.apply_step_options(options)
-
-        # log environmental data
-        try:
-            app = get_app()
-            env = self.dropbot_remote.get_environment_state()
-            app.experiment_log.add_data({"environment": env}, self.name)
-            logger.info('temp=%.1fC, Rel. humidity=%.1f%%' %
-                        (env['temperature_celsius'],
-                         100 * env['relative_humidity']))
-
-        except Exception:
-            logger.debug('[%s] Failed to get environment data.', __name__,
-                         exc_info=True)
 
         emit_signal('on_step_complete', [self.name])
 
