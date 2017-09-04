@@ -562,6 +562,13 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     MAX11210_begin(self.board)
 
                     if step_label.lower() == 'background':
+                        ''' Set PMT control voltage via digipot.'''
+                        # Divide the control voltage by the maximum 1100 mV and
+                        # convert it to digipot steps
+                        pmt_digipot = int((self.board.config.pmt_control_voltage /
+                                           1100.) * 255)
+                        self.board.pmt_set_pot(pmt_digipot)
+
                         '''
                         Perform certain calibration steps only for the background
                         measurement.
@@ -581,18 +588,18 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             self.board.MAX11210_setSelfCalOffset(self.adc_offset_calibration)
                     self.board.MAX11210_setSysOffsetCal(self.board.config.pmt_sys_offset_cal)
                     self.board.MAX11210_setSysGainCal(self.board.config.pmt_sys_gain_cal)
+                    self.board.MAX11210_send_command(0b10001000)
 
                     adc_calibration = self.board.get_adc_calibration().to_dict()
-
                     logger.info('ADC calibration:\n%s' % adc_calibration)
                     step_log['ADC calibration'] = adc_calibration
+                    temp_pmt_control_voltage = []
+                    for i in range(0,20):
+                         temp_pmt_control_voltage.append(self.board.pmt_reference_voltage())
+                    step_pmt_control_voltage = sum(temp_pmt_control_voltage)/len(temp_pmt_control_voltage)
+                    logger.info('PMT control voltge: %s' %step_pmt_control_voltage)
+                    step_log['PMT control voltge'] = step_pmt_control_voltage
 
-                    ''' Set PMT control voltage via digipot.'''
-                    # Divide the control voltage by the maximum 1100 mV and
-                    # convert it to digipot steps
-                    pmt_digipot = int((self.board.config.pmt_control_voltage /
-                                       1100.) * 255)
-                    self.board.pmt_set_pot(pmt_digipot)
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
 
