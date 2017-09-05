@@ -941,12 +941,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
     def on_experiment_log_changed(self, experiment_log):
         '''
         Handler called when a new experiment starts.
+
+        .. versionchanged:: v0.23.2
+            Fix typo to retrieve :data:`app_values` before item lookup.
         '''
         logger.info('Reset board state to defaults.')
         if self.board:
             self.reset_board_state()
 
         # Initialize auto pump
+        app_values = self.get_app_values()
         try:
             if app_values.get('Use auto pump'):
                 # Connect Dropbot to receive capacitance measurements
