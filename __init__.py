@@ -600,7 +600,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     step_pmt_control_voltage = sum(temp_pmt_control_voltage)/len(temp_pmt_control_voltage)
                     logger.info('PMT control voltge: %s' %step_pmt_control_voltage)
                     step_log['PMT control voltge'] = step_pmt_control_voltage
-                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 100)/1000:
+                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 100)/1000.0:
                         logger.warning('PMT Control Voltage Error!\n'
                                     'Failed to reach the specified control voltage!\n'
                                     'Voltage read: %s' %step_pmt_control_voltage)
