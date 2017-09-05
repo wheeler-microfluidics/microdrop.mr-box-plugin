@@ -15,9 +15,10 @@ from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       PluginGlobals)
 from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
+from pygtkhelpers.gthreads import gtk_threadsafe
+from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from pygtkhelpers.utils import dict_to_form
-from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
 import gobject
 import gtk
 import microdrop_utility as utility
@@ -696,6 +697,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             logger.debug('No PMT readings files found.')
             return
 
+        # Wrap writing of results to occur in main GTK thread in case
+        # confirmation dialog needs to be displayed.
+        @gtk_threadsafe
         def _threadsafe_write_results():
             while True:
                 try:
@@ -713,10 +717,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     if response == gtk.RESPONSE_NO:
                         break
 
-        # Schedule writing of results to occur in main GTK
-        # thread in case confirmation dialog needs to be
-        # displayed.
-        gobject.idle_add(_threadsafe_write_results)
+        _threadsafe_write_results()
 
     def pump_control_dialog(self, frequency_hz, duration_s):
         # `PumpControl` class uses threads.  Need to initialize GTK to use

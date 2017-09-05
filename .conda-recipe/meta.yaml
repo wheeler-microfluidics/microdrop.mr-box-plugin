@@ -30,7 +30,7 @@ requirements:
     - path_helpers >=0.5
     - pip-helpers
     - pyyaml
-    - wheeler.pygtkhelpers
+    - wheeler.pygtkhelpers >=0.18
 
   run:
     - conda-helpers >=0.4
@@ -44,7 +44,7 @@ requirements:
     - path_helpers >=0.5
     - pip-helpers
     - pyyaml
-    - wheeler.pygtkhelpers
+    - wheeler.pygtkhelpers >=0.18
 
 test:
   commands:
