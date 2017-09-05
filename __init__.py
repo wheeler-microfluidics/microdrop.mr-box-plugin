@@ -593,12 +593,17 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     adc_calibration = self.board.get_adc_calibration().to_dict()
                     logger.info('ADC calibration:\n%s' % adc_calibration)
                     step_log['ADC calibration'] = adc_calibration
+
                     temp_pmt_control_voltage = []
                     for i in range(0,20):
                          temp_pmt_control_voltage.append(self.board.pmt_reference_voltage())
                     step_pmt_control_voltage = sum(temp_pmt_control_voltage)/len(temp_pmt_control_voltage)
                     logger.info('PMT control voltge: %s' %step_pmt_control_voltage)
                     step_log['PMT control voltge'] = step_pmt_control_voltage
+                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 100)/1000:
+                        logger.warning('PMT Control Voltage Error!\n'
+                                    'Failed to reach the specified control voltage!\n'
+                                    'Voltage read: %s' %step_pmt_control_voltage)
 
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
