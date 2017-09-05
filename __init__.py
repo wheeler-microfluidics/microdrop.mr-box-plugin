@@ -340,16 +340,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                          # is set to `True`.
                          # TODO Convert ADC Gain to dropdown list with
                          # valid_values = (1,2,4,8,16)
-                        #  Integer.named('ADC_Gain')
-                        #  .using(default=1, optional=True,
-                        #         validators=[ValueAtLeast(minimum=1),
-                        #                     ValueAtMost(maximum=16)],
-                        #         properties={'mappers':
-                        #                     [PropertyMapper
-                        #                      ('sensitive', attr='Measure_PMT'),
-                        #                      PropertyMapper
-                        #                      ('editable',
-                        #                       attr='Measure_PMT')]}),
                          # Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
@@ -565,45 +555,59 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         ''' Set PMT control voltage via digipot.'''
                         # Divide the control voltage by the maximum 1100 mV and
                         # convert it to digipot steps
-                        pmt_digipot = int((self.board.config.pmt_control_voltage /
-                                           1100.) * 255)
+                        pmt_digipot = int((self.board.config
+                                           .pmt_control_voltage / 1100.) * 255)
                         self.board.pmt_set_pot(pmt_digipot)
 
                         '''
-                        Perform certain calibration steps only for the background
-                        measurement.
+                        Perform certain calibration steps only for the
+                        background measurement.
 
                         Read from the 24bit Registries (SCGC, SCOC)
                         and store their values for the rest of the
                         measurements.
                         '''
-                        self.adc_gain_calibration = self.board.MAX11210_getSelfCalGain()
-                        self.adc_offset_calibration = self.board.MAX11210_getSelfCalOffset()
+                        self.adc_gain_calibration = \
+                            self.board.MAX11210_getSelfCalGain()
+                        self.adc_offset_calibration = \
+                            self.board.MAX11210_getSelfCalOffset()
                     else:
                         if not self.adc_gain_calibration:
-                            logger.warning('Missing ADC Calibration Values!'
-                                            'Please perform a Background measurement')
+                            logger.warning('Missing ADC Calibration Values! '
+                                           'Please perform a Background '
+                                           'measurement')
                         else:
-                            self.board.MAX11210_setSelfCalGain(self.adc_gain_calibration)
-                            self.board.MAX11210_setSelfCalOffset(self.adc_offset_calibration)
-                    self.board.MAX11210_setSysOffsetCal(self.board.config.pmt_sys_offset_cal)
-                    self.board.MAX11210_setSysGainCal(self.board.config.pmt_sys_gain_cal)
+                            adc_gain = self.adc_gain_calibration
+                            adc_offset = self.adc_offset_calibration
+                            self.board.MAX11210_setSelfCalGain(adc_gain)
+                            self.board.MAX11210_setSelfCalOffset(adc_offset)
+                    self.board.MAX11210_setSysOffsetCal(self.board.config
+                                                        .pmt_sys_offset_cal)
+                    self.board.MAX11210_setSysGainCal(self.board.config
+                                                      .pmt_sys_gain_cal)
                     self.board.MAX11210_send_command(0b10001000)
 
-                    adc_calibration = self.board.get_adc_calibration().to_dict()
-                    logger.info('ADC calibration:\n%s' % adc_calibration)
+                    adc_calibration = (self.board.get_adc_calibration()
+                                       .to_dict())
+                    logger.info('ADC calibration:\n%s', adc_calibration)
                     step_log['ADC calibration'] = adc_calibration
 
                     temp_pmt_control_voltage = []
-                    for i in range(0,20):
-                         temp_pmt_control_voltage.append(self.board.pmt_reference_voltage())
-                    step_pmt_control_voltage = sum(temp_pmt_control_voltage)/len(temp_pmt_control_voltage)
-                    logger.info('PMT control voltge: %s' %step_pmt_control_voltage)
+                    for i in range(0, 20):
+                        temp_pmt_control_voltage\
+                            .append(self.board.pmt_reference_voltage())
+                    step_pmt_control_voltage = (sum(temp_pmt_control_voltage) /
+                                                len(temp_pmt_control_voltage))
+                    logger.info('PMT control voltge: %s',
+                                step_pmt_control_voltage)
                     step_log['PMT control voltge'] = step_pmt_control_voltage
-                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 100)/1000.0:
+                    if step_pmt_control_voltage < ((self.board.config
+                                                    .pmt_control_voltage - 100)
+                                                   / 1000.):
                         logger.warning('PMT Control Voltage Error!\n'
-                                    'Failed to reach the specified control voltage!\n'
-                                    'Voltage read: %s' %step_pmt_control_voltage)
+                                       'Failed to reach the specified control '
+                                       'voltage!\nVoltage read: %s',
+                                       step_pmt_control_voltage)
 
                     # Launch PMT measure dialog.
                     delta_t = dt.timedelta(seconds=1)
@@ -636,7 +640,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         #
                         # [1]: http://ndjson.org/
                         filename = ph.path('PMT_readings-step%04d.ndjson' %
-                                    app.protocol.current_step_number)
+                                           app.protocol.current_step_number)
                         log_dir = app.experiment_log.get_log_path()
                         log_dir.makedirs_p()
 
