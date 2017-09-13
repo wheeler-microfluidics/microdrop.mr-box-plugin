@@ -595,7 +595,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             self.board.MAX11210_setRate(120)
                             reading_i.append(self.board.MAX11210_getData())
                         reading_avg = (sum(reading_i)* 1.0) / (len(reading_i) * 1.0)
-                        self.off_cal_val = int(reading_avg) - 1677
+                        self.off_cal_val = int(reading_avg) - 100
                         self.board.pmt_close_shutter()
                     else:
                         if not self.adc_gain_calibration:
