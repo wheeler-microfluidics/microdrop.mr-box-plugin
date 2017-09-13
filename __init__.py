@@ -396,6 +396,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         self.adc_gain_calibration = None
         self.adc_offset_calibration = None
+        self.off_cal_val = None
 
     def reset_board_state(self):
         '''
@@ -577,8 +578,18 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         and store their values for the rest of the
                         measurements.
                         '''
+                        self.board.pmt_open_shutter()
                         self.adc_gain_calibration = self.board.MAX11210_getSelfCalGain()
                         self.adc_offset_calibration = self.board.MAX11210_getSelfCalOffset()
+                        self.board.MAX11210_setSysOffsetCal(0x00)
+                        self.board.MAX11210_send_command(0b10001000)
+                        reading_i = []
+                        for i in range(0,20):
+                            self.board.MAX11210_setRate(120)
+                            reading_i.append(self.board.MAX11210_getData())
+                        reading_avg = (sum(reading_i)* 1.0) / (len(reading_i) * 1.0)
+                        self.off_cal_val = int(reading_avg) - 1677
+                        self.board.pmt_close_shutter()
                     else:
                         if not self.adc_gain_calibration:
                             logger.warning('Missing ADC Calibration Values!'
@@ -586,7 +597,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         else:
                             self.board.MAX11210_setSelfCalGain(self.adc_gain_calibration)
                             self.board.MAX11210_setSelfCalOffset(self.adc_offset_calibration)
-                    self.board.MAX11210_setSysOffsetCal(self.board.config.pmt_sys_offset_cal)
+                    if (self.board.config.pmt_sys_offset_cal != 0):
+                        self.board.MAX11210_setSysOffsetCal(self.board.config.pmt_sys_offset_cal)
+                    else:
+                        self.board.MAX11210_setSysOffsetCal(self.off_cal_val)
                     self.board.MAX11210_setSysGainCal(self.board.config.pmt_sys_gain_cal)
                     self.board.MAX11210_send_command(0b10001000)
 
@@ -598,9 +612,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     for i in range(0,20):
                          temp_pmt_control_voltage.append(self.board.pmt_reference_voltage())
                     step_pmt_control_voltage = sum(temp_pmt_control_voltage)/len(temp_pmt_control_voltage)
+                    step_pmt_control_voltage = int(step_pmt_control_voltage*1000.0)
                     logger.info('PMT control voltge: %s' %step_pmt_control_voltage)
                     step_log['PMT control voltge'] = step_pmt_control_voltage
-                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 100)/1000.0:
+                    if step_pmt_control_voltage < (self.board.config.pmt_control_voltage - 150):
                         logger.warning('PMT Control Voltage Error!\n'
                                     'Failed to reach the specified control voltage!\n'
                                     'Voltage read: %s' %step_pmt_control_voltage)
