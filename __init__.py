@@ -127,6 +127,13 @@ def _write_results(template_path, output_path, data_files):
                               ['DateEntry']]
                 date_cell.value = dt.datetime.utcnow().date()
 
+                # Set the "Laptop" entry cell value to the current date.
+                import socket
+                laptop_cell = \
+                    worksheet[defined_names_by_worksheet['Assay Info']
+                              ['LaptopEntry']]
+                laptop_cell.value = socket.gethostname()
+
                 # Look up the location of the top cell in the measurement IDs
                 # column of the PMT results information table.
                 pmt_ids_range = (defined_names_by_worksheet['Assay Info']
