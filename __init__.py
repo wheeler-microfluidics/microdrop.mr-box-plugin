@@ -325,8 +325,16 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         .using(default=0, optional=True,
                                validators=[ValueAtLeast(minimum=0),
                                            ValueAtMost(maximum=1)]),
-                        Boolean.named('Use auto pump').using(
-                            default=False, optional=True))
+                        Boolean.named('Use auto pump')
+                        .using(default=False, optional=True),
+                        Float.named('Auto pump timeout')
+                        .using(default=5, optional=True,
+                               validators=[ValueAtLeast(minimum=0.1),
+                                           ValueAtMost(maximum=15)]),
+                        Integer.named('Auto pump frequency')
+                        .using(default=8000, optional=True,
+                               validators=[ValueAtLeast(minimum=100),
+                                           ValueAtMost(maximum=10000)]))
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
                          # PMT Fields
@@ -518,17 +526,26 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 if step_options.get('Pump'):
                     if app_values.get('Use auto pump'):
                         # Routine if auto pump is enabled
-                        self.board.pump_frequency_set(8000)
+                        auto_pump_timeout = (app_values
+                                    .get('Auto pump timeout'))
+                        auto_pump_frequency = (app_values
+                                    .get('Auto pump frequency'))
+
+                        self.dropbot_remote.hv_output_enabled = True
+                        self.dropbot_remote.hv_output_selected = True
+                        self.dropbot_remote.voltage = 100
+
+                        self.board.pump_frequency_set(auto_pump_frequency)
                         state = np.zeros(self.dropbot_remote
                                          .number_of_channels)
                         state[24] = 1
                         self.dropbot_remote.state_of_channels = state
-                        cap = 0
+                        cap = self.dropbot_remote.measure_capacitance()
                         max_cp = round(self.max_capacitance, 12)
                         start_time = time.time()
                         end_time = start_time
                         pump_time = end_time - start_time
-                        while ((cap < max_cp) and (pump_time < 5)):
+                        while ((cap < max_cp) and (pump_time < auto_pump_timeout)):
                             self.board.pump_activate()
                             x = []
                             for i in range(0, 10):
@@ -965,6 +982,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             self.reset_board_state()
 
         # Initialize auto pump
+        app_values = self.get_app_values()
         try:
             if app_values.get('Use auto pump'):
                 # Connect Dropbot to receive capacitance measurements
@@ -982,13 +1000,13 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 for i in range(0, 100):
                     mc.append(self.dropbot_remote.measure_capacitance())
                 self.max_capacitance = sum(mc) / len(mc)
-                logger.info('Capacitance of reservoir: %s' %
+                logger.info('Capacitance of filled reservoir: %s' %
                             self.max_capacitance)
                 state[24] = 0
                 self.dropbot_remote.state_of_channels = state
 
-                self.dropbot_remote.hv_output_enabled = False
-                self.dropbot_remote.hv_output_selected = False
+                #self.dropbot_remote.hv_output_enabled = False
+                #self.dropbot_remote.hv_output_selected = False
         except Exception:
             pass
 
