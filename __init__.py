@@ -325,6 +325,10 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         .using(default=0, optional=True,
                                validators=[ValueAtLeast(minimum=0),
                                            ValueAtMost(maximum=1)]),
+                        Boolean.named('30K PMT Resistor')
+                        .using(default=False, optional=True),
+                        Boolean.named('Show Report')
+                        .using(default=False, optional=True),
                         Boolean.named('Use auto pump')
                         .using(default=False, optional=True),
                         Float.named('Auto pump timeout')
@@ -612,7 +616,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                             self.board.MAX11210_setRate(120)
                             reading_i.append(self.board.MAX11210_getData())
                         reading_avg = (sum(reading_i)* 1.0) / (len(reading_i) * 1.0)
-                        self.off_cal_val = int(reading_avg) - 1677
+                        # Calibration settings for 30kOhm and 300kOhm Resistor
+                        if app_values.get('30K PMT Resistor'):
+                            self.off_cal_val = int(reading_avg) - 100
+                        else:
+                            self.off_cal_val = int(reading_avg) - 1677
                         self.board.pmt_close_shutter()
                     else:
                         if not self.adc_gain_calibration:
@@ -649,12 +657,17 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
                     # Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
+
+                    # Set Resistor state
+                    resistor_val = app_values.get('30K PMT Resistor')
                     # Construct a function compatible with `measure_dialog` to
                     # read from MAX11210 ADC.
+
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_rate=adc_rate))
+                                                        adc_rate=adc_rate,
+                                                        resistor_val = resistor_val))
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
@@ -971,7 +984,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def on_protocol_finished(self):
         # Protocol has finished.  Update
-        self.update_excel_results(launch=True)
+        app_values = self.get_app_values()
+        self.update_excel_results(launch=app_values.get('Show Report'))
 
     def on_experiment_log_changed(self, experiment_log):
         '''
