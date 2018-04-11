@@ -128,6 +128,13 @@ def _write_results(template_path, output_path, data_files):
                               ['DateEntry']]
                 date_cell.value = dt.datetime.utcnow().date()
 
+                # Set the "Laptop" entry cell value to the current date.
+                import socket
+                laptop_cell = \
+                    worksheet[defined_names_by_worksheet['Assay Info']
+                              ['LaptopEntry']]
+                laptop_cell.value = socket.gethostname()
+
                 # Look up the location of the top cell in the measurement IDs
                 # column of the PMT results information table.
                 pmt_ids_range = (defined_names_by_worksheet['Assay Info']
@@ -319,8 +326,20 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         .using(default=0, optional=True,
                                validators=[ValueAtLeast(minimum=0),
                                            ValueAtMost(maximum=1)]),
-                        Boolean.named('Use auto pump').using(
-                            default=False, optional=True))
+                        Boolean.named('30K PMT Resistor')
+                        .using(default=False, optional=True),
+                        Boolean.named('Show Report')
+                        .using(default=False, optional=True),
+                        Boolean.named('Use auto pump')
+                        .using(default=False, optional=True),
+                        Float.named('Auto pump timeout')
+                        .using(default=5, optional=True,
+                               validators=[ValueAtLeast(minimum=0.1),
+                                           ValueAtMost(maximum=15)]),
+                        Integer.named('Auto pump frequency')
+                        .using(default=8000, optional=True,
+                               validators=[ValueAtLeast(minimum=100),
+                                           ValueAtMost(maximum=10000)]))
     StepFields = Form.of(Boolean.named('Magnet')
                          .using(default=False, optional=True),
                          # PMT Fields
@@ -339,8 +358,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                                               attr='Measure_PMT')]}),
                          # Only allow ADC Gain to be set if `Measure_PMT` field
                          # is set to `True`.
-                         # TODO Convert ADC Gain to dropdown list with
-                         # valid_values = (1,2,4,8,16)
+
                          # Pump Fields
                          Boolean.named('Pump').using(default=False,
                                                      optional=True),
@@ -387,6 +405,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         self.adc_gain_calibration = None
         self.adc_offset_calibration = None
+        self.off_cal_val = None
 
     def reset_board_state(self):
         '''
@@ -398,9 +417,6 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
         if self.board is None:
             return
-
-        # TODO Add reset method for each component (e.g., z-stage, pump, PMT)
-        # TODO to respective `mr-box-peripheral-board.py` C++ classes code.
 
         # Home the magnet z-stage.
         self.board.zstage.home()
@@ -501,17 +517,26 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 if step_options.get('Pump'):
                     if app_values.get('Use auto pump'):
                         # Routine if auto pump is enabled
-                        self.board.pump_frequency_set(8000)
+                        auto_pump_timeout = (app_values
+                                    .get('Auto pump timeout'))
+                        auto_pump_frequency = (app_values
+                                    .get('Auto pump frequency'))
+
+                        self.dropbot_remote.hv_output_enabled = True
+                        self.dropbot_remote.hv_output_selected = True
+                        self.dropbot_remote.voltage = 100
+
+                        self.board.pump_frequency_set(auto_pump_frequency)
                         state = np.zeros(self.dropbot_remote
                                          .number_of_channels)
                         state[24] = 1
                         self.dropbot_remote.state_of_channels = state
-                        cap = 0
+                        cap = self.dropbot_remote.measure_capacitance()
                         max_cp = round(self.max_capacitance, 12)
                         start_time = time.time()
                         end_time = start_time
                         pump_time = end_time - start_time
-                        while ((cap < max_cp) and (pump_time < 5)):
+                        while ((cap < max_cp) and (pump_time < auto_pump_timeout)):
                             self.board.pump_activate()
                             x = []
                             for i in range(0, 10):
@@ -568,24 +593,40 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                         and store their values for the rest of the
                         measurements.
                         '''
-                        self.adc_gain_calibration = \
-                            self.board.MAX11210_getSelfCalGain()
-                        self.adc_offset_calibration = \
-                            self.board.MAX11210_getSelfCalOffset()
+                        self.board.pmt_open_shutter()
+                        self.adc_gain_calibration = self.board.MAX11210_getSelfCalGain()
+                        self.adc_offset_calibration = self.board.MAX11210_getSelfCalOffset()
+                        self.board.MAX11210_setSysOffsetCal(0x00)
+                        self.board.MAX11210_send_command(0b10001000)
+                        reading_i = []
+                        for i in range(0,20):
+                            self.board.MAX11210_setRate(120)
+                            reading_i.append(self.board.MAX11210_getData())
+                        reading_avg = ((sum(reading_i)* 1.0) /
+                                       (len(reading_i) * 1.0))
+                        # Calibration settings for 30kOhm and 300kOhm Resistor
+                        if app_values.get('30K PMT Resistor'):
+                            self.off_cal_val = int(reading_avg) - 100
+                        else:
+                            self.off_cal_val = int(reading_avg) - 1677
+                        self.board.pmt_close_shutter()
                     else:
                         if not self.adc_gain_calibration:
                             logger.warning('Missing ADC Calibration Values! '
                                            'Please perform a Background '
                                            'measurement')
                         else:
-                            adc_gain = self.adc_gain_calibration
-                            adc_offset = self.adc_offset_calibration
-                            self.board.MAX11210_setSelfCalGain(adc_gain)
-                            self.board.MAX11210_setSelfCalOffset(adc_offset)
-                    self.board.MAX11210_setSysOffsetCal(self.board.config
-                                                        .pmt_sys_offset_cal)
-                    self.board.MAX11210_setSysGainCal(self.board.config
-                                                      .pmt_sys_gain_cal)
+                            _adc_gain = self.adc_gain_calibration
+                            self.board.MAX11210_setSelfCalGain(_adc_gain)
+                            _adc_offset = self.adc_offset_calibration
+                            self.board.MAX11210_setSelfCalOffset(_adc_offset)
+                    if (self.board.config.pmt_sys_offset_cal != 0):
+                        _sys_offset = self.board.config.pmt_sys_offset_cal
+                        self.board.MAX11210_setSysOffsetCal(_sys_offset)
+                    else:
+                        self.board.MAX11210_setSysOffsetCal(self.off_cal_val)
+                    _sys_gain = self.board.config.pmt_sys_gain_cal
+                    self.board.MAX11210_setSysGainCal(_sys_gain)
                     self.board.MAX11210_send_command(0b10001000)
 
                     adc_calibration = (self.board.get_adc_calibration()
@@ -594,17 +635,18 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                     step_log['ADC calibration'] = adc_calibration
 
                     temp_pmt_control_voltage = []
-                    for i in range(0, 20):
-                        temp_pmt_control_voltage\
-                            .append(self.board.pmt_reference_voltage())
-                    step_pmt_control_voltage = (sum(temp_pmt_control_voltage) /
+                    for i in range(0,20):
+                         _reference_voltage = self.board.pmt_reference_voltage()
+                         temp_pmt_control_voltage.append(_reference_voltage)
+                    step_pmt_control_voltage = (sum(temp_pmt_control_voltage)/
                                                 len(temp_pmt_control_voltage))
-                    logger.info('PMT control voltge: %s',
-                                step_pmt_control_voltage)
+                    step_pmt_control_voltage = int(step_pmt_control_voltage*
+                                                    1000.0)
+                    logger.info('PMT control voltge: %s'
+                                %step_pmt_control_voltage)
                     step_log['PMT control voltge'] = step_pmt_control_voltage
-                    if step_pmt_control_voltage < ((self.board.config
-                                                    .pmt_control_voltage - 100)
-                                                   / 1000.):
+                    _control_voltage = self.board.config.pmt_control_voltage
+                    if step_pmt_control_voltage < (_control_voltage - 150):
                         logger.warning('PMT Control Voltage Error!\n'
                                        'Failed to reach the specified control '
                                        'voltage!\nVoltage read: %s',
@@ -615,12 +657,17 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
                     # Set sampling reset_board_state
                     adc_rate = self.board.config.pmt_sampling_rate
+
+                    # Set Resistor state
+                    resistor_val = app_values.get('30K PMT Resistor')
                     # Construct a function compatible with `measure_dialog` to
                     # read from MAX11210 ADC.
+
                     data_func = (mrbox.ui.gtk.measure_dialog
                                  .adc_data_func_factory(proxy=self.board,
                                                         delta_t=delta_t,
-                                                        adc_rate=adc_rate))
+                                                        adc_rate=adc_rate,
+                                                        resistor_val=resistor_val))
 
                     # Use constructed function to launch measurement dialog for
                     # the duration specified by the step options.
@@ -937,7 +984,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
 
     def on_protocol_finished(self):
         # Protocol has finished.  Update
-        self.update_excel_results(launch=True)
+        app_values = self.get_app_values()
+        self.update_excel_results(launch=app_values.get('Show Report'))
 
     def on_experiment_log_changed(self, experiment_log):
         '''
@@ -969,13 +1017,13 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 for i in range(0, 100):
                     mc.append(self.dropbot_remote.measure_capacitance())
                 self.max_capacitance = sum(mc) / len(mc)
-                logger.info('Capacitance of reservoir: %s' %
+                logger.info('Capacitance of filled reservoir: %s' %
                             self.max_capacitance)
                 state[24] = 0
                 self.dropbot_remote.state_of_channels = state
 
-                self.dropbot_remote.hv_output_enabled = False
-                self.dropbot_remote.hv_output_selected = False
+                #self.dropbot_remote.hv_output_enabled = False
+                #self.dropbot_remote.hv_output_selected = False
         except Exception:
             pass
 
