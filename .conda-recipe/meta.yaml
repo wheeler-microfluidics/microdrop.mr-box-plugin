@@ -24,7 +24,7 @@ requirements:
     - microdrop >=2.8
     - microdrop-plugin-template
     - microdrop-plugin-manager >=0.14
-    - mr-box-peripheral-board >=0.25
+    - mr-box-peripheral-board >=0.30
     - openpyxl-helpers >=0.6.1
     - pandas
     - path_helpers >=0.5
@@ -38,7 +38,7 @@ requirements:
     - microdrop >=2.8
     - microdrop-plugin-template
     - microdrop-plugin-manager >=0.14
-    - mr-box-peripheral-board >=0.25
+    - mr-box-peripheral-board >=0.30
     - openpyxl-helpers >=0.6.1
     - pandas
     - path_helpers >=0.5
