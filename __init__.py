@@ -6,13 +6,13 @@ import time
 import serial
 import warnings
 
-from flatland import Boolean, Float, Form, Integer
+from flatland import Integer, Float, Form, Enum, Boolean
 from flatland.validation import ValueAtLeast, ValueAtMost
 from microdrop.app_context import get_app
 from microdrop.plugin_helpers import AppDataController, StepOptionsController
 from microdrop.plugin_manager import (IPlugin, Plugin, implements, emit_signal,
                                       get_service_instance_by_name,
-                                      PluginGlobals)
+                                      PluginGlobals, ScheduleRequest)
 from mr_box_peripheral_board.max11210_adc_ui import MAX11210_begin
 from mr_box_peripheral_board.ui.gtk.pump_ui import PumpControl
 from pygtkhelpers.gthreads import gtk_threadsafe
@@ -885,8 +885,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         """
         # TODO: this should be re-enabled once we can get the
         # mr-box-peripheral-board to connect **after** the Dropbot.
-        # if function_name in ['on_plugin_enable']:
-        #    return [ScheduleRequest('dropbot_plugin', self.name)]
+        if function_name in ['on_plugin_enable']:
+           return [ScheduleRequest('dropbot_plugin', self.name)]
         return []
 
     ###########################################################################
