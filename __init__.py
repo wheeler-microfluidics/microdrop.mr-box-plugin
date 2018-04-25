@@ -900,6 +900,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         For example, when the MicroDrop application is **launched**, or when
         the plugin is **enabled** from the plugin manager dialog.
         '''
+        self.initialize_connection_with_dropbot()
+
         self.open_board_connection()
         if not self.initialized:
             app = get_app()
@@ -973,7 +975,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         # TODO: this should be run in on_plugin_enable; however, the
         # mr-box-peripheral-board seems to have trouble connecting **after**
         # the DropBot has connected.
-        self.initialize_connection_with_dropbot()
+        # self.initialize_connection_with_dropbot()
 
     def on_protocol_pause(self):
         '''
