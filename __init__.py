@@ -19,6 +19,7 @@ from pygtkhelpers.gthreads import gtk_threadsafe
 from pygtkhelpers.ui.extra_dialogs import yesno, FormViewDialog
 from pygtkhelpers.ui.objectlist import PropertyMapper
 from pygtkhelpers.utils import dict_to_form
+from scipy.optimize import curve_fit
 import gobject
 import gtk
 import microdrop_utility as utility
@@ -516,38 +517,129 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 # ----
                 if step_options.get('Pump'):
                     if app_values.get('Use auto pump'):
-                        # Routine if auto pump is enabled
-                        auto_pump_timeout = (app_values
-                                    .get('Auto pump timeout'))
-                        auto_pump_frequency = (app_values
-                                    .get('Auto pump frequency'))
-
-                        self.dropbot_remote.hv_output_enabled = True
-                        self.dropbot_remote.hv_output_selected = True
-                        self.dropbot_remote.voltage = 100
-
-                        self.board.pump_frequency_set(auto_pump_frequency)
-                        state = np.zeros(self.dropbot_remote
-                                         .number_of_channels)
-                        state[24] = 1
-                        self.dropbot_remote.state_of_channels = state
-                        cap = self.dropbot_remote.measure_capacitance()
-                        max_cp = round(self.max_capacitance, 12)
-                        start_time = time.time()
-                        end_time = start_time
-                        pump_time = end_time - start_time
-                        while ((cap < max_cp) and (pump_time < auto_pump_timeout)):
-                            self.board.pump_activate()
-                            x = []
-                            for i in range(0, 10):
-                                x.append(self.dropbot_remote
-                                         .measure_capacitance())
+                        # Routine to purge the pump
+                        if (step_label.lower() == 'purge' or
+                            step_label.lower() == 'prime'):
+                            duration_s = step_options.get('Pump_duration_(s)')
+                            for i in range(1,100,10):
+                                self.board.pump_frequency_set(10*i)
+                                self.board.pump_activate()
+                                time.sleep(duration_s)
                             self.board.pump_deactivate()
-                            cap = sum(x) / len(x)
+                            logger.info('Pump Primed!')
+                        # Routine to initialize automatic pump
+                        elif step_label.lower() == 'prepare':
+                        # Connect Dropbot to receive capacitance measurements
+                            self.initialize_connection_with_dropbot()
+                        # Turn on Channel 24 (Pump reservoir)
+                            self.dropbot_remote.hv_output_enabled = True
+                            self.dropbot_remote.hv_output_selected = True
+                            self.dropbot_remote.voltage = 100
+                            state = np.zeros(
+                                        self.dropbot_remote.number_of_channels)
+                            state[24] = 1
+                            self.dropbot_remote.state_of_channels = state
+
+                            x = []
+                            for i in range(0,100):
+                                cap = self.dropbot_remote.measure_capacitance()
+                                x.append(cap)
+                            cap = sum(x)/len(x)
+                            logger.info('Capacitance of empty reservoir: %s' %
+                                        cap)
+
+                            def func(x, a, b):
+                                return a * x + b
+
+                            # self.board.pump_frequency_set(10000)
+                            auto_pump_frequency = (app_values
+                                                  .get('Auto pump frequency'))
+                            self.board.pump_frequency_set(auto_pump_frequency)
+                            c = []
+                            sdt = []
+                            start_time = time.time()
                             end_time = time.time()
                             pump_time = end_time - start_time
-                        logger.info('Capacitance of filled reservoir: %s' %
-                                    cap)
+
+                            self.popt = 0
+                            while (pump_time<15):
+                                self.board.pump_activate()
+                                time.sleep(0.25)
+                                self.board.pump_deactivate()
+
+                                x = []
+                                for i in range(0,10):
+                                    cap = (self.dropbot_remote
+                                           .measure_capacitance())
+                                    x.append(cap)
+                                cap = sum(x)/len(x)
+                                c.append(cap)
+
+                                end_time = time.time()
+                                pump_time = end_time - start_time
+                                sdt.append(pump_time)
+
+                                if (len(c) > 3):
+                                    cdt = np.array(pump_time)
+                                    y_calc = func(cdt, *self.popt)
+                                    res = cap - y_calc
+                                    r_val = (abs(res) / c[0])
+
+                                    if (r_val>= 1.0):
+                                        logger.info('Filling reservoir '
+                                                    + 'stopped!')
+                                        break
+                                if (len(c) > 2):
+                                    x_val = np.array(sdt)
+                                    y_val = np.array(c)
+                                    self.popt, _ = curve_fit(func,
+                                                            x_val, y_val)
+                            x = []
+                            for i in range(0,100):
+                                cap = self.dropbot_remote.measure_capacitance()
+                                x.append(cap)
+                            cap = sum(x)/len(x)
+                            self.max_capacitance = cap
+                            logger.info('Capacitance of filled reservoir: %s' %
+                                        self.max_capacitance)
+
+                        else:
+                        # Routine if auto pump is enabled and initialized
+                            if (self.max_capacitance != 0):
+                                auto_pump_timeout = (app_values
+                                            .get('Auto pump timeout'))
+                                auto_pump_frequency = (app_values
+                                            .get('Auto pump frequency'))
+
+                                self.dropbot_remote.hv_output_enabled = True
+                                self.dropbot_remote.hv_output_selected = True
+                                self.dropbot_remote.voltage = 100
+
+                                self.board.pump_frequency_set(auto_pump_frequency)
+                                state = np.zeros(self.dropbot_remote
+                                                 .number_of_channels)
+                                state[24] = 1
+                                self.dropbot_remote.state_of_channels = state
+                                cap = self.dropbot_remote.measure_capacitance()
+                                max_cp = round(self.max_capacitance, 12)
+                                start_time = time.time()
+                                end_time = start_time
+                                pump_time = end_time - start_time
+                                while ((cap < max_cp) and
+                                       (pump_time < auto_pump_timeout)):
+                                    self.board.pump_activate()
+                                    time.sleep(0.2)
+                                    self.board.pump_deactivate()
+                                    x = []
+                                    for i in range(0, 10):
+                                        x.append(self.dropbot_remote
+                                                 .measure_capacitance())
+                                    # self.board.pump_deactivate()
+                                    cap = sum(x) / len(x)
+                                    end_time = time.time()
+                                    pump_time = end_time - start_time
+                                logger.info('Capacitance of filled'
+                                            + 'reservoir: %s' % cap)
                     else:
                         # Launch pump control dialog.
                         frequency_hz = step_options.get('Pump_frequency_(hz)')
@@ -1000,34 +1092,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         if self.board:
             self.reset_board_state()
 
-        # Initialize auto pump
-        app_values = self.get_app_values()
-        try:
-            if app_values.get('Use auto pump'):
-                # Connect Dropbot to receive capacitance measurements
-                self.initialize_connection_with_dropbot()
-                # Turn on Channel 24 (Pump reservoir)
-                self.dropbot_remote.hv_output_enabled = True
-                self.dropbot_remote.hv_output_selected = True
-                self.dropbot_remote.voltage = 100
-                state = np.zeros(self.dropbot_remote.number_of_channels)
-                state[24] = 1
-                self.dropbot_remote.state_of_channels = state
-                logger.warning('Please load the reservoir with 7.5 uL WB')
-                self.max_capacitance = 0
-                mc = []
-                for i in range(0, 100):
-                    mc.append(self.dropbot_remote.measure_capacitance())
-                self.max_capacitance = sum(mc) / len(mc)
-                logger.info('Capacitance of filled reservoir: %s' %
-                            self.max_capacitance)
-                state[24] = 0
-                self.dropbot_remote.state_of_channels = state
-
-                #self.dropbot_remote.hv_output_enabled = False
-                #self.dropbot_remote.hv_output_selected = False
-        except Exception:
-            pass
+        # Reset auto pump maximum value
+        self.max_capacitance = 0
 
     def on_app_options_changed(self, plugin_name):
         """
