@@ -1,0 +1,3 @@
+package_name: microdrop.mr-box-plugin
+plugin_name: mr_box_plugin
+version: "0.25"

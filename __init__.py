@@ -30,6 +30,7 @@ import openpyxl_helpers as oxh
 import numpy as np
 import pandas as pd
 import path_helpers as ph
+import trollius as asyncio
 
 from ._version import get_versions
 __version__ = get_versions()['version']
@@ -902,7 +903,7 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 pass
 
             try:
-                self.board = mrbox.SerialProxy()
+                self.board = mrbox.SerialProxy(baudrate=57600, settling_time_s=2.5)
 
                 host_software_version = utility.Version.fromstring(
                     str(self.board.host_software_version))
@@ -1120,27 +1121,8 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
             elif k == 'LED 2 brightness':
                 self.board.led2.brightness = v
 
-    def on_step_options_changed(self, plugin, step_number):
-        '''
-        Handler called when field values for the specified plugin and step.
-
-        Parameters
-        ----------
-        plugin : str
-            Name of plugin.
-        step_number : int
-            Step index number.
-        '''
-        # Step options have changed.
-        app = get_app()
-
-        if all([plugin == self.plugin_name, app.realtime_mode,
-                step_number == app.protocol.current_step_number]):
-            # Apply step options.
-            options = self.get_step_options()
-            self.apply_step_options(options)
-
-    def on_step_run(self):
+    @asyncio.coroutine
+    def on_step_run(self, plugin_kwargs, signals):
         '''
         Handler called whenever a step is executed.
 
@@ -1150,29 +1132,27 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         proceeding.
         '''
         # Get latest step field values for this plugin.
-        options = self.get_step_options()
+        options = plugin_kwargs[self.name]
         # Apply step options
         self.apply_step_options(options)
 
-        emit_signal('on_step_complete', [self.name])
-
-    def on_step_swapped(self, original_step_number, new_step_number):
-        '''
-        Handler called when a new step is activated/selected.
-
-        Parameters
-        ----------
-        original_step_number : int
-            Step number of previously activated step.
-        new_step_number : int
-            Step number of newly activated step.
-        '''
-        # Step options have changed.
-        app = get_app()
-        if app.realtime_mode and not app.running:
-            # Apply step options.
-            options = self.get_step_options()
-            self.apply_step_options(options)
+    # def on_step_swapped(self, original_step_number, new_step_number):
+    #     '''
+    #     Handler called when a new step is activated/selected.
+    #
+    #     Parameters
+    #     ----------
+    #     original_step_number : int
+    #         Step number of previously activated step.
+    #     new_step_number : int
+    #         Step number of newly activated step.
+    #     '''
+    #     # Step options have changed.
+    #     app = get_app()
+    #     if app.realtime_mode and not app.running:
+    #         # Apply step options.
+    #         options = self.get_step_options()
+    #         self.apply_step_options(options)
 
 
 PluginGlobals.pop_env()
