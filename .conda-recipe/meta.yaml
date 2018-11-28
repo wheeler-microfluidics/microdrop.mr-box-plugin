@@ -1,17 +1,16 @@
+{% if GIT_DESCRIBE_NUMBER > '0' %}
+{% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] + '.post' + GIT_DESCRIBE_NUMBER %}
+{% else %}
+{% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] %}
+{% endif %}
 # source will be downloaded prior to filling in jinja templates
 # Example assumes that this folder has setup.py in it
 source:
   git_url: ../
 
 package:
-  name: microdrop.mr-box-plugin
-
-{% if GIT_DESCRIBE_NUMBER > '0' %}
-  version: {{ GIT_DESCRIBE_TAG[1:] }}+{{ GIT_DESCRIBE_NUMBER }}
-{% else %}
-  version: {{ GIT_DESCRIBE_TAG[1:] }}
-{% endif %}
-
+  name: 'microdrop.mr-box-plugin'
+  version: {{ GIT_VERSION }}
 
 build:
   number: 0
@@ -20,31 +19,37 @@ build:
 requirements:
   build:
     - conda-helpers >=0.4
+    - dropbot >=1.68
     - flatland-fork
-    - microdrop >2.9
-    - microdrop-plugin-template
-    - microdrop-plugin-manager >=0.14
+    - trollius
+    - path_helpers >=0.5
+    - pip-helpers
+    - pyyaml
+    - wheeler.pygtkhelpers >=0.19
     - mr-box-peripheral-board >=0.31
     - openpyxl-helpers >=0.6.1
     - pandas
-    - path_helpers >=0.5
-    - pip-helpers
-    - pyyaml
-    - wheeler.pygtkhelpers >=0.18
-
-  run:
-    - conda-helpers >=0.4
-    - flatland-fork
-    - microdrop >=2.8
+    - microdrop >=2.31
     - microdrop-plugin-template
     - microdrop-plugin-manager >=0.14
-    - mr-box-peripheral-board >=0.30
-    - openpyxl-helpers >=0.6.1
-    - pandas
+    - microdrop-utility
+
+run:
+    - conda-helpers >=0.4
+    - dropbot >=1.68
+    - flatland-fork
+    - trollius
     - path_helpers >=0.5
     - pip-helpers
     - pyyaml
-    - wheeler.pygtkhelpers >=0.18
+    - wheeler.pygtkhelpers >=0.19
+    - mr-box-peripheral-board >=0.31
+    - openpyxl-helpers >=0.6.1
+    - pandas
+    - microdrop >=2.31
+    - microdrop-plugin-template
+    - microdrop-plugin-manager >=0.14
+    - microdrop-utility
 
 test:
   commands:
