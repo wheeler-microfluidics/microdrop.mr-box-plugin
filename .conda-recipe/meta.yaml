@@ -26,7 +26,7 @@ requirements:
     - pip-helpers
     - pyyaml
     - wheeler.pygtkhelpers >=0.19
-    - mr-box-peripheral-board >=0.31
+    - mr-box-peripheral-board >=0.31.2
     - openpyxl-helpers >=0.6.1
     - pandas
     - microdrop >=2.31
@@ -43,7 +43,7 @@ run:
     - pip-helpers
     - pyyaml
     - wheeler.pygtkhelpers >=0.19
-    - mr-box-peripheral-board >=0.31
+    - mr-box-peripheral-board >=0.31.2
     - openpyxl-helpers >=0.6.1
     - pandas
     - microdrop >=2.31
