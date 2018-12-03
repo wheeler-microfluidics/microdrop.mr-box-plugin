@@ -968,6 +968,11 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
         Close serial connection to MR-Box peripheral board.
         '''
         if self.board is not None:
+            try:
+                self.board.zstage.home()
+                logger.info('Z-stage homed.')
+            except:
+                pass
             # Close board connection and release serial connection.
             self.board.close()
 
@@ -1120,6 +1125,9 @@ class MrBoxPeripheralBoardPlugin(AppDataController, StepOptionsController,
                 self.board.led1.brightness = v
             elif k == 'LED 2 brightness':
                 self.board.led2.brightness = v
+
+    def on_app_exit(self):
+        self.close_board_connection()
 
     @asyncio.coroutine
     def on_step_run(self, plugin_kwargs, signals):
